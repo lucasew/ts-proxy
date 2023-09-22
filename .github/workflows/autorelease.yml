@@ -4,6 +4,8 @@ on:
   push:
     branches:
     - main
+    tags:
+    - '*'
 jobs:
   build-binary:
     runs-on: ubuntu-latest
@@ -11,14 +13,15 @@ jobs:
       contents: write
     steps:
     - name: Create relase
+      if: github.ref_type == 'tag'
       id: release
       uses: actions/create-release@v1
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-          draft: true
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          draft: false
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
     - uses: actions/checkout@v2
     - uses: actions/setup-go@v4.1.0
       with:
@@ -30,10 +33,11 @@ jobs:
     - run: go build -o build/ts-proxyd-linux-amd64.exe ./cmd/ts-proxyd
 
     - uses: svenstaro/upload-release-action@v2
+      if: github.ref_type == 'tag'
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: build/*
-        tag: ${{ github.ref }}
+        tag: ${{ github.ref_name }}
         overwrite: true
         file_glob: true
 
