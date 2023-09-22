@@ -3,7 +3,7 @@ name: Autorelease
 on:
   push:
     branches:
-    - master
+    - main
 jobs:
   build-binary:
     runs-on: ubuntu-latest
