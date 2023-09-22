@@ -1,3 +1,5 @@
 # binary created with go build
-
 main
+
+# nix result link
+result
