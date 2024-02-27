@@ -1,7 +1,7 @@
-{ buildGo121Module
+{ buildGo122Module
 , lib
 }:
-buildGo121Module {
+buildGo122Module {
   name = "ts-proxy";
 
   src = ./.;
