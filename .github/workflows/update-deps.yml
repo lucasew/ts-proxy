@@ -1,4 +1,5 @@
 # based on https://brandur.org/fragments/mostly-automatic-deps
+name: Update dependencies
 
 env:
   GO_VERSION: 1.22
