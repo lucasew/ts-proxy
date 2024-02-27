@@ -2,11 +2,14 @@
 name: Update dependencies
 
 env:
-  GO_VERSION: 1.22
+  GO_VERSION: '1.22'
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 0 * * 1"
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   dep_update:
