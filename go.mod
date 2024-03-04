@@ -2,7 +2,7 @@ module github.com/lucasew/ts-proxy
 
 go 1.22.0
 
-require tailscale.com v1.60.0
+require tailscale.com v1.60.1
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
@@ -79,7 +79,7 @@ require (
 	golang.org/x/tools v0.18.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
-	gvisor.dev/gvisor v0.0.0-20240227172908-bb7ed9175faa // indirect
+	gvisor.dev/gvisor v0.0.0-20240303223114-40b74cc60b23 // indirect
 	inet.af/peercred v0.0.0-20210906144145-0893ea02156a // indirect
 	nhooyr.io/websocket v1.8.10 // indirect
 )
