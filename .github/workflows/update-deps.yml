@@ -23,6 +23,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - name: Install Nix
         uses: cachix/install-nix-action@v26
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Checkout
         uses: actions/checkout@v4
