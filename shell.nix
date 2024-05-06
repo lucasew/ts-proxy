@@ -3,5 +3,6 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     go_1_22
     gopls
+    python3
   ];
 }
