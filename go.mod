@@ -3,7 +3,7 @@ module github.com/lucasew/ts-proxy
 go 1.22.0
 
 require (
-	gvisor.dev/gvisor v0.0.0-20240521174809-5eedbf551134
+	gvisor.dev/gvisor v0.0.0-20240521192614-79331f35cf99
 	tailscale.com v1.66.4
 )
 
