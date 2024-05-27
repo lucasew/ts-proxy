@@ -7,7 +7,7 @@ buildGo122Module {
   src = ./.;
 
   # vendorHash = "sha256:${lib.fakeSha256}";
-  vendorHash = "sha256-ZZvdHSWSkudlzqRS8nrtn293ymdGwfL0gnCh+UHAk7M=";
+  vendorHash = "sha256-PeUO9unz89NNNxqhDawd0wduolXSrCnQq9hYDzHzh7w=";
 
   postConfigure = ''
     # chmod -R +w vendor/gvisor.dev/gvisor #/pkg/refs/refs_template.go
