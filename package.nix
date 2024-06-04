@@ -6,6 +6,8 @@ buildGo122Module {
 
   src = ./.;
 
+  CGO_ENABLED = 0;
+
   # vendorHash = "sha256:${lib.fakeSha256}";
   vendorHash = "sha256-LcX5ck3mHF67oY4qv3LEWsWMohlEgCgqD14DzOClIPM=";
 
