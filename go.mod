@@ -82,6 +82,6 @@ require (
 	golang.org/x/tools v0.21.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
-	gvisor.dev/gvisor v0.0.0-20240601004217-bb242cb31035 // indirect
+	gvisor.dev/gvisor v0.0.0-20240601000839-2607065bd125 // indirect
 	nhooyr.io/websocket v1.8.11 // indirect
 )
