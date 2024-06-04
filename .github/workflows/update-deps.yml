@@ -31,8 +31,8 @@ jobs:
 
       - name: Update minor and patch-level dependencies
         run: go get -t -u ./...
-      - name: Update minor and patch-level dependencies for gvisor
-        run: go get -t -u gvisor.dev/gvisor@v0.0.0-20240306221502-ee1e1f6070e3
+      # - name: Update minor and patch-level dependencies for gvisor
+      #   run: go get -t -u gvisor.dev/gvisor@v0.0.0-20240306221502-ee1e1f6070e3
 
       - name: Tidy
         run: go mod tidy
