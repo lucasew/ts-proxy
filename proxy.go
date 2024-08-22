@@ -11,18 +11,17 @@ import (
 
 	"os"
 
-	"tailscale.com/client/tailscale"
+	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/tsnet"
 )
 
 type TailscaleProxyServer struct {
-	ctx         context.Context
-	cancel      func()
-	proxy       *httputil.ReverseProxy
-	mux         *http.ServeMux
-	options     TailscaleProxyServerOptions
-	server      *tsnet.Server
-	localClient *tailscale.LocalClient
+	ctx     context.Context
+	cancel  func()
+	proxy   *httputil.ReverseProxy
+	mux     *http.ServeMux
+	options TailscaleProxyServerOptions
+	server  *tsnet.Server
 }
 
 type TailscaleProxyServerOptions struct {
@@ -67,18 +66,13 @@ func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscalePro
 
 	proxy := httputil.NewSingleHostReverseProxy(options.Upstream)
 	mux := http.NewServeMux()
-	localClient, err := s.LocalClient()
-	if err != nil {
-		return nil, err
-	}
 	ret := &TailscaleProxyServer{
-		ctx:         ctx,
-		cancel:      cancel,
-		proxy:       proxy,
-		mux:         mux,
-		options:     options,
-		server:      s,
-		localClient: localClient,
+		ctx:     ctx,
+		cancel:  cancel,
+		proxy:   proxy,
+		mux:     mux,
+		options: options,
+		server:  s,
 	}
 	mux.HandleFunc("/", ret.ServeHTTP)
 	return ret, nil
@@ -118,8 +112,16 @@ func (tps *TailscaleProxyServer) Run() {
 	<-tps.ctx.Done()
 }
 
+func (tps *TailscaleProxyServer) WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
+	lc, err := tps.server.LocalClient()
+	if err != nil {
+		return nil, err
+	}
+	return lc.WhoIs(ctx, remoteAddr)
+}
+
 func (tps *TailscaleProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	userInfo, err := tps.localClient.WhoIs(r.Context(), r.RemoteAddr)
+	userInfo, err := tps.WhoIs(r.Context(), r.RemoteAddr)
 	if err != nil {
 		w.WriteHeader(500)
 		return
