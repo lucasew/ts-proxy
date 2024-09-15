@@ -6,7 +6,7 @@
 
 let
 self = dockerTools.streamLayeredImage {
-    name = "fusionsolar-bot";
+    name = "ts-proxy";
     tag = "${builtins.readFile ./version.txt}-${self.shortRev or self.dirtyShortRev}";
     maxLayers = 2;
 
@@ -30,7 +30,6 @@ self = dockerTools.streamLayeredImage {
     config = {
       Entrypoint = [
         (lib.getExe (python3Packages.callPackage ./package.nix {}))
-        "--headless"
       ];
       User = "user";
       Env = [
@@ -39,8 +38,6 @@ self = dockerTools.streamLayeredImage {
         "UID=1000"
         "GID=1000"
         "TZ=UTC"
-        "FONTCONFIG_FILE=${fontconfig.out}/etc/fonts/fonts.conf"
-        "FONTCONFIG_PATH=${fontconfig.out}/etc/fonts/"
       ];
     };
   };
