@@ -40,6 +40,9 @@ jobs:
       - name: Update Nix hashes
         run: ./.github/update-nix-hashes.py
 
+      - name: Update Nix flake
+        run: nix flake update
+
       - name: Create pull request
         uses: peter-evans/create-pull-request@v4
         with:

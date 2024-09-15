@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+if [ $# == 1 ]; then
+	VERSION="$1"; shift
+else
+	echo ./make_release versao_nova >&2
+	exit 1
+fi
+
+printf "%s" "$VERSION" > version.txt
+
+git add -A
+git commit -sm "bump to $VERSION"
+git tag "$VERSION"
