@@ -28,7 +28,7 @@ dockerTools.streamLayeredImage {
 
   config = {
     Entrypoint = [
-      (lib.getExe (python3Packages.callPackage ./package.nix {}))
+      (lib.getExe (python3Packages.callPackage ./package.nix {inherit self;}))
     ];
     User = "user";
     Env = [

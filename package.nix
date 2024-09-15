@@ -18,4 +18,6 @@ buildGo122Module {
     # substituteInPlace vendor/gvisor.dev/gvisor/pkg/refs/refs_template.go \
     #   --replace refs_template refs
   '';
+
+  meta.mainProgram = "ts-proxy";
 }
