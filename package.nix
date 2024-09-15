@@ -1,5 +1,6 @@
 { buildGo122Module
 , lib
+, callPackage
 }:
 buildGo122Module {
   name = "ts-proxy";
@@ -17,4 +18,6 @@ buildGo122Module {
     # substituteInPlace vendor/gvisor.dev/gvisor/pkg/refs/refs_template.go \
     #   --replace refs_template refs
   '';
+
+  passthru.container = callPackage ./container.nix {};
 }
