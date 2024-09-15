@@ -11,10 +11,8 @@
     pkgs = import nixpkgs { inherit system; };
   in {
     packages = {
-      default = pkgs.python3Packages.callPackage ./package.nix {};
-      container = pkgs.python3Packages.callPackage ./container.nix {
-        inherit self;
-      };
+      default = pkgs.python3Packages.callPackage ./package.nix { inherit self; };
+      container = pkgs.python3Packages.callPackage ./container.nix { inherit self; };
     };
   });
 }

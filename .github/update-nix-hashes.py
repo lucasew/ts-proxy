@@ -5,7 +5,6 @@ import subprocess
 
 
 PACKAGE_NIX = Path(__file__).parent.parent / "package.nix"
-DEFAULT_NIX = Path(__file__).parent.parent / "default.nix"
 
 EMPTY_HASH = "sha256:" + (64 * "0")
 
@@ -27,7 +26,7 @@ old_hash = findings[0].strip()
 
 PACKAGE_NIX.write_text(original_text.replace(old_hash, EMPTY_HASH))
 
-drvPath = subprocess.run(['nix', 'eval', '-f', str(DEFAULT_NIX), 'drvPath', '--raw'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+drvPath = subprocess.run(['nix', 'eval', str(PACKAGE_NIX.parent) + "#default.drvPath", '--raw'], stdout=subprocess.PIPE).stdout.decode('utf-8')
 print('drvPath', drvPath)
 
 build_log = subprocess.run(['nix-store', '-r', drvPath], stderr=subprocess.PIPE).stderr.decode('utf-8')
@@ -38,4 +37,4 @@ assert len(findings) == 1
 new_hash = findings[0].strip()
 PACKAGE_NIX.write_text(original_text.replace(old_hash, new_hash))
 
-subprocess.run(["nix", "build", "-L", "--no-link", "-f", str(DEFAULT_NIX)])
+subprocess.run(["nix", "build", "-L", "--no-link", str(PACKAGE_NIX.parent)])

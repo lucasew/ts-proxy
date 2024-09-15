@@ -1,9 +1,9 @@
 { buildGo122Module
-, lib
-, callPackage
+, self
 }:
 buildGo122Module {
-  name = "ts-proxy";
+  pname = "ts-proxy";
+  version = "${builtins.readFile ./version.txt}-${self.shortRev or self.dirtyShortRev}";
 
   src = ./.;
 
