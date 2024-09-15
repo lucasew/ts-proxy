@@ -1,5 +1,6 @@
 { dockerTools
-, python3Packages
+, cacert
+, callPackage
 , lib
 , self
 }:
@@ -28,10 +29,11 @@ dockerTools.streamLayeredImage {
 
   config = {
     Entrypoint = [
-      (lib.getExe (python3Packages.callPackage ./package.nix {inherit self;}))
+      (lib.getExe (callPackage ./package.nix {inherit self;}))
     ];
     User = "user";
     Env = [
+      "SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt"
       "HOME=/tmp"
       "LANGUAGE=en_US"
       "UID=1000"
