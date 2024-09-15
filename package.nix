@@ -19,5 +19,5 @@ buildGo122Module {
     #   --replace refs_template refs
   '';
 
-  meta.mainProgram = "ts-proxy";
+  meta.mainProgram = "ts-proxyd";
 }
