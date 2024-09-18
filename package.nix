@@ -1,7 +1,7 @@
-{ buildGo122Module
+{ buildGo123Module
 , self
 }:
-buildGo122Module {
+buildGo123Module {
   pname = "ts-proxy";
   version = "${builtins.readFile ./version.txt}-${self.shortRev or self.dirtyShortRev}";
 
