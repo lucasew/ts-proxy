@@ -15,11 +15,12 @@ func init() {
 	var remoteHost string
 	flag.StringVar(&remoteHost, "h", "", "Where to forward the connection")
 	flag.BoolVar(&options.EnableFunnel, "f", false, "Enable tailscale funnel")
+	flag.BoolVar(&options.EnableHTTPS, "t", false, "Enable HTTPS")
 	flag.StringVar(&options.Hostname, "n", "", "Hostname in tailscale devices list")
 	flag.StringVar(&options.StateDir, "s", "", "State directory")
 	flag.Parse()
 	defaultPort := ":80"
-	if options.EnableFunnel {
+	if options.EnableFunnel || options.EnableHTTPS {
 		defaultPort = ":443"
 	}
 	flag.StringVar(&options.Addr, "addr", defaultPort, "Port to listen")

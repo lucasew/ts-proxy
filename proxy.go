@@ -33,6 +33,8 @@ type TailscaleProxyServerOptions struct {
 	Hostname string
 	// wether to enable Tailscale Funnel, will crash if no permissions
 	EnableFunnel bool
+	// wether to enable provisioning of TLS Certificates for HTTPS
+	EnableHTTPS bool
 	// where to store tailscale data
 	StateDir string
 	// address to bind the server
@@ -102,6 +104,8 @@ func (tps *TailscaleProxyServer) Run() {
 	var err error
 	if tps.options.EnableFunnel {
 		ln, err = tps.server.ListenFunnel("tcp", tps.options.Addr)
+	} else if tps.options.EnableHTTPS {
+		ln, err = tps.server.ListenTLS("tcp", tps.options.Addr)
 	} else {
 		ln, err = tps.server.Listen("tcp", tps.options.Addr)
 	}
