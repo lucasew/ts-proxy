@@ -5,8 +5,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"net/http"
-	"net/http/httputil"
 	"net/url"
 
 	"os"
@@ -15,11 +13,19 @@ import (
 	"tailscale.com/tsnet"
 )
 
+var (
+	ErrInvalidUpstream = errors.New("invalid upstream")
+)
+
+type Server interface {
+	Serve(ln net.Listener) error
+}
+
+type ListenerFunction func(network string, addr string) (net.Listener, error)
+
 type TailscaleProxyServer struct {
 	ctx     context.Context
 	cancel  func()
-	proxy   *httputil.ReverseProxy
-	mux     *http.ServeMux
 	options TailscaleProxyServerOptions
 	server  *tsnet.Server
 }
@@ -27,23 +33,23 @@ type TailscaleProxyServer struct {
 type TailscaleProxyServerOptions struct {
 	// context
 	Context context.Context
-	// where to forward requests
-	Upstream *url.URL
 	// node name in tailscale panel
 	Hostname string
 	// wether to enable Tailscale Funnel, will crash if no permissions
 	EnableFunnel bool
 	// wether to enable provisioning of TLS Certificates for HTTPS
-	EnableHTTPS bool
+	EnableTLS bool
+	// wether to enable HTTP proxy logic
+	EnableHTTP bool
 	// where to store tailscale data
 	StateDir string
-	// address to bind the server
+	// protocol to listen, passed to net.Dial
+	Network string
+	// where to forward requests
+	Upstream string
+	// address to bind the server, passed to net.Dial
 	Addr string
 }
-
-var (
-	ErrInvalidUpstream = errors.New("invalid upstream")
-)
 
 func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscaleProxyServer, error) {
 	if options.Context == nil {
@@ -55,7 +61,7 @@ func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscalePro
 	if options.Hostname == "" {
 		s.Hostname = "tsproxy"
 	}
-	if options.Upstream == nil {
+	if options.Upstream == "" {
 		return nil, ErrInvalidUpstream
 	}
 	if options.StateDir != "" {
@@ -65,30 +71,46 @@ func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscalePro
 		}
 		s.Dir = options.StateDir
 	}
-
-	proxy := httputil.NewSingleHostReverseProxy(options.Upstream)
-	mux := http.NewServeMux()
-	ret := &TailscaleProxyServer{
+	return &TailscaleProxyServer{
 		ctx:     ctx,
 		cancel:  cancel,
-		proxy:   proxy,
-		mux:     mux,
 		options: options,
 		server:  s,
-	}
-	mux.HandleFunc("/", ret.ServeHTTP)
-	return ret, nil
+	}, nil
 }
 
-func (tps *TailscaleProxyServer) handleServer(ln net.Listener) {
-	server := http.Server{
-		Handler: tps,
-		BaseContext: func(_ net.Listener) context.Context {
-			return tps.ctx
-		},
+func (tps *TailscaleProxyServer) listenFunnel(network string, addr string) (net.Listener, error) {
+	return tps.server.ListenFunnel(network, addr)
+}
+
+func (tps *TailscaleProxyServer) GetListenerFunction() ListenerFunction {
+	if tps.options.EnableFunnel {
+		return tps.listenFunnel
 	}
-	err := server.Serve(ln)
-	tps.handleError(err)
+	if tps.options.EnableTLS {
+		return tps.server.ListenTLS
+	}
+	return tps.server.Listen
+}
+
+func (tps *TailscaleProxyServer) GetListener() (net.Listener, error) {
+	return tps.GetListenerFunction()("tcp", tps.options.Addr)
+}
+
+func (tps *TailscaleProxyServer) Dial(network string, addr string) (net.Conn, error) {
+	u, err := url.Parse(tps.options.Upstream)
+	if err != nil {
+		return nil, err
+	}
+	return net.Dial(tps.options.Network, u.Host)
+}
+
+func (tps *TailscaleProxyServer) WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
+	lc, err := tps.server.LocalClient()
+	if err != nil {
+		return nil, err
+	}
+	return lc.WhoIs(ctx, remoteAddr)
 }
 
 func (tps *TailscaleProxyServer) handleError(err error) bool {
@@ -100,39 +122,17 @@ func (tps *TailscaleProxyServer) handleError(err error) bool {
 }
 
 func (tps *TailscaleProxyServer) Run() {
-	var ln net.Listener
-	var err error
-	if tps.options.EnableFunnel {
-		ln, err = tps.server.ListenFunnel("tcp", tps.options.Addr)
-	} else if tps.options.EnableHTTPS {
-		ln, err = tps.server.ListenTLS("tcp", tps.options.Addr)
-	} else {
-		ln, err = tps.server.Listen("tcp", tps.options.Addr)
-	}
+	ln, err := tps.GetListener()
+	defer ln.Close()
 	if tps.handleError(err) {
 		return
 	}
-	go tps.handleServer(ln)
-	<-tps.ctx.Done()
-}
-
-func (tps *TailscaleProxyServer) WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
-	lc, err := tps.server.LocalClient()
-	if err != nil {
-		return nil, err
+	server := NewTailscaleTCPProxyServer(tps)
+	if tps.options.EnableHTTP {
+		server, err = NewTailscaleHTTPProxyServer(tps)
+		if tps.handleError(err) {
+			return
+		}
 	}
-	return lc.WhoIs(ctx, remoteAddr)
-}
-
-func (tps *TailscaleProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	userInfo, err := tps.WhoIs(r.Context(), r.RemoteAddr)
-	if err != nil {
-		w.WriteHeader(500)
-		return
-	}
-	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
-	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
-	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
-	r.Header.Set("Tailscale-Headers-Info", "https://tailscale.com/s/serve-headers")
-	tps.proxy.ServeHTTP(w, r)
+	server.Serve(ln)
 }
