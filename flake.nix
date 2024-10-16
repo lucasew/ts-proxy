@@ -14,5 +14,11 @@
       default = pkgs.python3Packages.callPackage ./package.nix { inherit self; };
       container = pkgs.python3Packages.callPackage ./container.nix { inherit self; };
     };
+    devShells.default = pkgs.mkShell {
+      buildInputs = with pkgs; [
+        gopls
+        go
+      ];
+    };
   });
 }
