@@ -1,11 +1,10 @@
 package tsproxy
 
 import (
-	"context"
-	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 
 	"github.com/davecgh/go-spew/spew"
@@ -17,25 +16,21 @@ func init() {
 
 type TailscaleHTTPProxyServer struct {
 	server *TailscaleProxyServer
-	client *http.Client
-	scheme string
+	proxy  *httputil.ReverseProxy
 }
 
 func NewTailscaleHTTPProxyServer(server *TailscaleProxyServer) (Server, error) {
-	transport := &http.Transport{
+	u := &url.URL{
+		Scheme: "http",
+		Host:   server.Hostname(),
+	}
+	proxy := httputil.NewSingleHostReverseProxy(u)
+	proxy.Transport = &http.Transport{
 		Dial: server.Dial,
-	}
-	client := &http.Client{
-		Transport: transport,
-	}
-	parsedURL, err := url.Parse(server.options.Upstream)
-	if err != nil {
-		return nil, err
 	}
 	return &TailscaleHTTPProxyServer{
 		server: server,
-		client: client,
-		scheme: parsedURL.Scheme,
+		proxy:  proxy,
 	}, nil
 }
 
@@ -51,29 +46,22 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		w.WriteHeader(500)
 		return
 	}
-	log.Printf("got http conn")
-	defer log.Printf("http conn end")
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	req := r.Clone(ctx)
-	req.URL.Scheme = tps.scheme
-	req.URL.Host = "whatever-would-be-ignored-anyway"
-	req.RequestURI = ""
-	req.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
-	req.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
-	req.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
-	req.Header.Set("Tailscale-Headers-Info", "https://tailscale.com/s/serve-headers")
-	resp, err := tps.client.Do(req)
-	if err != nil {
-		log.Printf("error/http/proxy: %s", err.Error())
-		w.WriteHeader(500)
+	if r.Host != tps.server.Hostname() {
+		destinationURL := new(url.URL)
+		*destinationURL = *r.URL
+		destinationURL.Host = tps.server.Hostname() + tps.server.options.Listen
+		if tps.server.options.EnableTLS {
+			destinationURL.Scheme = "https"
+		} else {
+			destinationURL.Scheme = "http"
+		}
+		http.Redirect(w, r, destinationURL.String(), http.StatusMovedPermanently)
 		return
 	}
-	for k, v := range resp.Header {
-		w.Header()[k] = v
-	}
-	w.WriteHeader(resp.StatusCode)
-	buf := bufferPool.Get().([]byte)
-	defer bufferPool.Put(buf)
-	io.CopyBuffer(w, resp.Body, buf)
+	log.Printf("%s %s %s %s", r.Method, userInfo.UserProfile.LoginName, r.Host, r.URL.String())
+	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
+	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
+	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
+	r.Header.Set("Tailscale-Headers-Info", "https://tailscale.com/s/serve-headers")
+	tps.proxy.ServeHTTP(w, r)
 }

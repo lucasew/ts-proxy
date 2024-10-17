@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"net/url"
 
 	"os"
 
@@ -46,9 +45,9 @@ type TailscaleProxyServerOptions struct {
 	// protocol to listen, passed to net.Dial
 	Network string
 	// where to forward requests
-	Upstream string
+	Address string
 	// address to bind the server, passed to net.Dial
-	Addr string
+	Listen string
 }
 
 func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscaleProxyServer, error) {
@@ -57,11 +56,11 @@ func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscalePro
 	}
 	ctx, cancel := context.WithCancel(options.Context)
 	s := new(tsnet.Server)
-	s.Hostname = options.Hostname
 	if options.Hostname == "" {
-		s.Hostname = "tsproxy"
+		options.Hostname = "tsproxy"
 	}
-	if options.Upstream == "" {
+	s.Hostname = options.Hostname
+	if options.Address == "" {
 		return nil, ErrInvalidUpstream
 	}
 	if options.StateDir != "" {
@@ -83,6 +82,13 @@ func (tps *TailscaleProxyServer) listenFunnel(network string, addr string) (net.
 	return tps.server.ListenFunnel(network, addr)
 }
 
+func (tps *TailscaleProxyServer) Hostname() string {
+	for _, domain := range tps.server.CertDomains() {
+		return domain
+	}
+	return tps.options.Hostname
+}
+
 func (tps *TailscaleProxyServer) GetListenerFunction() ListenerFunction {
 	if tps.options.EnableFunnel {
 		return tps.listenFunnel
@@ -94,15 +100,13 @@ func (tps *TailscaleProxyServer) GetListenerFunction() ListenerFunction {
 }
 
 func (tps *TailscaleProxyServer) GetListener() (net.Listener, error) {
-	return tps.GetListenerFunction()("tcp", tps.options.Addr)
+	return tps.GetListenerFunction()("tcp", tps.options.Listen)
 }
 
 func (tps *TailscaleProxyServer) Dial(network string, addr string) (net.Conn, error) {
-	u, err := url.Parse(tps.options.Upstream)
-	if err != nil {
-		return nil, err
-	}
-	return net.Dial(tps.options.Network, u.Host)
+	dialNetwork := tps.options.Network
+	dialHost := tps.options.Address
+	return net.Dial(dialNetwork, dialHost)
 }
 
 func (tps *TailscaleProxyServer) WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
