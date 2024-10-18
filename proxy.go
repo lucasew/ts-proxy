@@ -127,10 +127,10 @@ func (tps *TailscaleProxyServer) handleError(err error) bool {
 
 func (tps *TailscaleProxyServer) Run() {
 	ln, err := tps.GetListener()
-	defer ln.Close()
 	if tps.handleError(err) {
 		return
 	}
+	defer ln.Close()
 	server := NewTailscaleTCPProxyServer(tps)
 	if tps.options.EnableHTTP {
 		server, err = NewTailscaleHTTPProxyServer(tps)
