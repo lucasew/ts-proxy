@@ -46,7 +46,7 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		w.WriteHeader(500)
 		return
 	}
-	if r.URL.Hostname() != tps.server.Hostname() {
+	if r.URL.Hostname() != "" && r.URL.Hostname() != tps.server.Hostname() {
 		destinationURL := new(url.URL)
 		*destinationURL = *r.URL
 		destinationURL.Host = tps.server.Hostname() + tps.server.options.Listen
