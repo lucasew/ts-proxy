@@ -55,6 +55,7 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		} else {
 			destinationURL.Scheme = "http"
 		}
+		log.Printf("redirect: '%s' -> '%s'", r.URL.String(), destinationURL.String())
 		http.Redirect(w, r, destinationURL.String(), http.StatusMovedPermanently)
 		return
 	}
