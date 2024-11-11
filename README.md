@@ -26,12 +26,15 @@ version! It's as safe and stable as
 [tclip](https://github.com/tailscale-dev/tclip) is because this proxy uses the
 exact same primitives.
 
-> **Warning**
+> [!WARNING] About header authentication security
 > You can count on the headers sent by ts-proxy as long as you follow the following conditions:
 > - Anything that changes the headers name representation such as Apache with PHP could be cheated
 > by passing the header TAILSCALE_USER_LOGIN, for example.
+>
 > - If some users can access your actual service directly without passing the traffic through ts-proxy
 they can change all the headers they want, including authentication ones.
+>
+> - If you don't use the header authentication for anything in a given service these issues will not be a problem for that service.
 
 
 ## Usage
