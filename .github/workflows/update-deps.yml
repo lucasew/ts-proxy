@@ -32,8 +32,14 @@ jobs:
       - name: Update Nix flake
         run: nix flake update
 
+      - name: Build upstream tailscale source
+        run: 'nix build nixpkgs#tailscale.src -o output_ts'
+
+      - name: Fetch lockfile from Tailscale
+        run: cp output_ts/{go.mod,go.sum} . && sed -i 's;module tailscale\.com; module github.com/lucasew/ts-proxy;' go.mod
+
       - name: Update minor and patch-level dependencies
-        run: go get -t -u ./... gvisor.dev/gvisor@go tailscale.com@v$(nix eval nixpkgs#tailscale.version --raw) github.com/tailscale/golang-x-crypto@v0.24.0
+        run: go get -t ./...
 
       - name: Update Nix hashes
         run: ./.github/update-nix-hashes.py
