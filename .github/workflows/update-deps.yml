@@ -33,7 +33,7 @@ jobs:
         run: nix flake update
 
       - name: Update minor and patch-level dependencies
-        run: go get -t -u ./... gvisor.dev/gvisor@go tailscale.com@v$(nix eval nixpkgs#tailscale.version --raw)
+        run: go get -t -u ./... gvisor.dev/gvisor@go tailscale.com@v$(nix eval nixpkgs#tailscale.version --raw) github.com/tailscale/golang-x-crypto@v0.24.0
 
       - name: Update Nix hashes
         run: ./.github/update-nix-hashes.py
