@@ -33,10 +33,10 @@ jobs:
         run: nix flake update
 
       - name: Build upstream tailscale source
-        run: 'nix build nixpkgs#tailscale.src -o output_ts'
+        run: 'nix build nixpkgs#tailscale.src -o result_ts'
 
       - name: Fetch lockfile from Tailscale
-        run: cp output_ts/{go.mod,go.sum} . && sed -i 's;module tailscale\.com; module github.com/lucasew/ts-proxy;' go.mod
+        run: cp result_ts/{go.mod,go.sum} . && sed -i 's;module tailscale\.com; module github.com/lucasew/ts-proxy;' go.mod
 
       - name: Update minor and patch-level dependencies
         run: go get -t ./...
