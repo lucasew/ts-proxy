@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Update minor and patch-level dependencies
-        run: go get -t -u ./... gvisor.dev/gvisor@go
+        run: go get -t -u ./... gvisor.dev/gvisor@go github.com/tailscale/tailscale@$(nix eval nixpkgs#tailscale.version --raw)
       # - name: Update minor and patch-level dependencies for gvisor
       #   run: go get -t -u gvisor.dev/gvisor@v0.0.0-20240306221502-ee1e1f6070e3
 
@@ -42,6 +42,9 @@ jobs:
 
       - name: Update Nix flake
         run: nix flake update
+
+      - name: Try to build it
+        run: nix build
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v4
