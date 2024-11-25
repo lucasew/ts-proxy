@@ -38,8 +38,11 @@ jobs:
       - name: Fetch lockfile from Tailscale
         run: cp result_ts/{go.mod,go.sum} . && sed -i 's;module tailscale\.com; module github.com/lucasew/ts-proxy;' go.mod
 
-      - name: Update minor and patch-level dependencies
+      - name: Go get the rest
         run: go get -t ./...
+
+      - name: Go mod tidy
+        run: go mod tidy
 
       - name: Update Nix hashes
         run: ./.github/update-nix-hashes.py
