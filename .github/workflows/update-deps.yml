@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Update minor and patch-level dependencies
-        run: go get -t -u ./... gvisor.dev/gvisor@go github.com/tailscale/tailscale@v$(nix eval nixpkgs#tailscale.version --raw)
+        run: go get -t -u ./... gvisor.dev/gvisor@go tailscale.com@v$(nix eval nixpkgs#tailscale.version --raw)
       # - name: Update minor and patch-level dependencies for gvisor
       #   run: go get -t -u gvisor.dev/gvisor@v0.0.0-20240306221502-ee1e1f6070e3
 
