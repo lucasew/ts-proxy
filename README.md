@@ -51,3 +51,21 @@ Usage of ./ts-proxyd:
   -s string
     	State directory
 ```
+
+## Release schedule
+Version structure example: 0.7.10
+  - 0: major
+  - 7: minor
+  - 10: patch
+
+Each week an automatic PR is sent to update the package dependencies. For each update there will be a patch release.
+
+Bug fixes would be shipped in patch releases.
+
+Anything that has breaking changes by changing something in this repository will be released as a minor release.
+
+No plans for bumping the major versions yet. 
+
+## Next steps
+- [ ] A way to expose a folder, maybe using single page application patterns, instead of only ports.
+- [ ] Experiments around exposing many nodes using only one process and a TOML, or YAML, config file.
