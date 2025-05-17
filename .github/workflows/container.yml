@@ -15,7 +15,7 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Login to registry
