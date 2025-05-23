@@ -1,16 +1,17 @@
-{ buildGo123Module
+{ buildGo124Module
 , self
+, lib
 }:
-buildGo123Module {
+buildGo124Module {
   pname = "ts-proxy";
-  version = "${builtins.readFile ./version.txt}-${self.shortRev or self.dirtyShortRev}";
+  version = "${builtins.readFile ./version.txt}-${self.shortRev or self.dirtyShortRev or "rev"}";
 
   src = ./.;
 
-  CGO_ENABLED = 0;
+  env.CGO_ENABLED = 0;
 
   # vendorHash = "sha256:${lib.fakeSha256}";
-  vendorHash = "sha256-QPpVpHJHxhPx6vuCdrg6Uz7BlT2Gk85JFd8cfqyxQQw=";
+  vendorHash = "sha256-B2QA/UCMD8/Y0bqTl2AAGsbutGNuPlICL1aki/2J6LM=";
 
   postConfigure = ''
     # chmod -R +w vendor/gvisor.dev/gvisor #/pkg/refs/refs_template.go
