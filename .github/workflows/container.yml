@@ -29,5 +29,6 @@ jobs:
           TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         if: github.ref_type == 'tag'
         run: |
-          docker build -t "$TAG" .
-          docker push "$TAG"
+          VERSION="$(cat version.txt)"
+          docker build -t "$TAG:$VERSION" .
+          docker push "$TAG:$VERSION"
