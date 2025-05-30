@@ -16,8 +16,6 @@ jobs:
       IMAGE_NAME: ${{ github.repository }}
       USERNAME: ${{ github.actor }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
     - name: Install Nix
       uses: cachix/install-nix-action@v31
