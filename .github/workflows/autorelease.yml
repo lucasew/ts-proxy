@@ -85,7 +85,7 @@ jobs:
         NEW_VERSION: ${{ github.event.inputs.new_version }}
       run: |
         if [[ ! -z "$NEW_VERSION" ]]; then
-          ./make_release "$NEW_VERSION"
+          NO_TAG=1 ./make_release "$NEW_VERSION"
           echo "New version: $(cat version.txt)" >> $GITHUB_STEP_SUMMARY
           echo "RELEASE_VERSION=$(cat version.txt)" >> $GITHUB_ENV
         fi
