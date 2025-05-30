@@ -6,12 +6,64 @@ on:
     - main
     tags:
     - '*'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 6' # saturday 2am
 jobs:
-  build-binary:
+  autorelease:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Login to registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ env.USERNAME }}
+        password: ${{ github.token }}
+    - uses: actions/setup-go@v5.5.0
+      with:
+          go-version: '1.24'
+
+    - uses: actions/checkout@v4
+
+    - name: Update Nix flake
+      run: nix flake update
+
+    - name: Update Nix hashes
+      run: ./.github/update-nix-hashes.py
+
+    - name: Try to build it
+      run: 'nix build .#'
+
+    - run: mkdir build -p && ls && pwd
+    - run: GOOS=windows GOARCH=amd64 go build -o build/ts-proxyd-windows-amd64.exe ./cmd/ts-proxyd
+    - run: go build -o build/ts-proxyd-linux-amd64 ./cmd/ts-proxyd
+
+    - name: Create Pull Request if there is new stuff from updaters
+      uses: peter-evans/create-pull-request@v7
+      id: pr_create
+      with:
+        commit-message: Updater script changes
+        branch: updater-bot
+        delete-branch: true
+        title: "Updater: stuff changed"
+        body: |
+          Changes caused from update scripts
+
+    - name: Stop if a pull request was created
+      env:
+        PR_NUMBER: ${{ steps.pr_create.outputs.pull-request-number }}
+      run: |
+        if [[ ! -z "$PR_NUMBER" ]]; then
+          echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+
     - name: Create relase
       if: github.ref_type == 'tag'
       id: release
@@ -22,14 +74,6 @@ jobs:
           draft: false
           tag_name: ${{ github.ref_name }}
           release_name: Release ${{ github.ref_name }}
-    - uses: actions/checkout@v4
-    - uses: actions/setup-go@v5.5.0
-      with:
-          go-version: '1.24'
-
-    - run: mkdir build -p && ls && pwd
-    - run: GOOS=windows GOARCH=amd64 go build -o build/ts-proxyd-windows-amd64.exe ./cmd/ts-proxyd
-    - run: go build -o build/ts-proxyd-linux-amd64 ./cmd/ts-proxyd
 
     - uses: svenstaro/upload-release-action@v2
       if: github.ref_type == 'tag'
@@ -40,3 +84,11 @@ jobs:
         overwrite: true
         file_glob: true
 
+    - name: "Build and publish container"
+      env:
+        TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+      if: github.ref_type == 'tag'
+      run: |
+        VERSION="$(cat version.txt)"
+        docker build -t "$TAG:$VERSION" .
+        docker push "$TAG:$VERSION"
