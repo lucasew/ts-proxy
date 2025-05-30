@@ -11,6 +11,10 @@ on:
     - cron: '0 2 * * 6' # saturday 2am
 jobs:
   autorelease:
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+      USERNAME: ${{ github.actor }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
