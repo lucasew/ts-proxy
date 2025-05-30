@@ -7,6 +7,22 @@ else
 	exit 1
 fi
 
+CURRENT_VERSION=($(cat version.txt | sed 's;\.; ;g'))
+
+case "$VERSION" in
+	patch)
+		VERSION="${CURRENT_VERSION[0]}.${CURRENT_VERSION[1]}.$((${CURRENT_VERSION[2]}+1))"
+	;;
+	minor)
+		VERSION="${CURRENT_VERSION[0]}.$((${CURRENT_VERSION[1]}+1)).0"
+	;;
+	major)
+		VERSION="$((${CURRENT_VERSION[0]}+1)).0.0"
+	;;
+esac
+
+echo new version: $VERSION
+exit 0
 printf "%s" "$VERSION" > version.txt
 
 git add -A

@@ -7,6 +7,10 @@ on:
     tags:
     - '*'
   workflow_dispatch:
+    inputs:
+      new_version:
+        description: 'New tag version'
+        default: 'patch'
   schedule:
     - cron: '0 2 * * 6' # saturday 2am
 jobs:
@@ -71,6 +75,13 @@ jobs:
     - run: GOOS=windows GOARCH=amd64 go build -o build/ts-proxyd-windows-amd64.exe ./cmd/ts-proxyd
     - run: go build -o build/ts-proxyd-linux-amd64 ./cmd/ts-proxyd
 
+    - name: Make release if everything looks right
+      env:
+        NEW_VERSION: ${{ github.event.inputs.new_version }}
+      run: |
+        if [[ ! -z "$NEW_VERSION" ]]; then
+          ./make_release "$NEW_VERSION"
+        fi
 
     - name: Create relase
       if: github.ref_type == 'tag'
