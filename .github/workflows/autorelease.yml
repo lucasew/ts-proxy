@@ -16,6 +16,11 @@ jobs:
       IMAGE_NAME: ${{ github.repository }}
       USERNAME: ${{ github.actor }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     steps:
     - name: Install Nix
       uses: cachix/install-nix-action@v31
@@ -27,10 +32,6 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ env.USERNAME }}
         password: ${{ github.token }}
-    - uses: actions/setup-go@v5.5.0
-      with:
-          go-version: '1.24'
-
     - uses: actions/checkout@v4
 
     - name: Update Nix flake
@@ -38,13 +39,6 @@ jobs:
 
     - name: Update Nix hashes
       run: ./.github/update-nix-hashes.py
-
-    - name: Try to build it
-      run: 'nix build .#'
-
-    - run: mkdir build -p && ls && pwd
-    - run: GOOS=windows GOARCH=amd64 go build -o build/ts-proxyd-windows-amd64.exe ./cmd/ts-proxyd
-    - run: go build -o build/ts-proxyd-linux-amd64 ./cmd/ts-proxyd
 
     - name: Create Pull Request if there is new stuff from updaters
       uses: peter-evans/create-pull-request@v7
@@ -65,6 +59,17 @@ jobs:
           echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
           exit 1
         fi
+    - uses: actions/setup-go@v5.5.0
+      with:
+          go-version: '1.24'
+
+    - name: Try to build it
+      run: 'nix build .#'
+
+    - run: mkdir build -p && ls && pwd
+    - run: GOOS=windows GOARCH=amd64 go build -o build/ts-proxyd-windows-amd64.exe ./cmd/ts-proxyd
+    - run: go build -o build/ts-proxyd-linux-amd64 ./cmd/ts-proxyd
+
 
     - name: Create relase
       if: github.ref_type == 'tag'
