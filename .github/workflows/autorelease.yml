@@ -117,4 +117,6 @@ jobs:
       run: |
         VERSION="$(cat version.txt)"
         docker build -t "$TAG:$VERSION" .
+        docker tag "$TAG:$VERSION" "$TAG:latest"
         docker push "$TAG:$VERSION"
+        docker push "$TAG:latest"
