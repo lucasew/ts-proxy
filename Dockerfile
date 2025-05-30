@@ -16,7 +16,7 @@ ENV VERSION_GIT=$VERSION_GIT
 
 RUN go build -v -o ts-proxyd ./cmd/ts-proxyd
 
-FROM alpine:3.21
+FROM alpine:3.22
 
 RUN apk add --no-cache ca-certificates iptables iproute2 ip6tables
 
