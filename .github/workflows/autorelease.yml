@@ -17,10 +17,11 @@ jobs:
       USERNAME: ${{ github.actor }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       attestations: write
       id-token: write
+      pull-requests: write
     steps:
     - name: Install Nix
       uses: cachix/install-nix-action@v31
