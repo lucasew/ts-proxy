@@ -29,6 +29,4 @@ jobs:
           TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         if: github.ref_type == 'tag'
         run: |
-          nix build .#container && ./result | docker load
-          docker tag $( docker image ls -f reference=ts-proxy --format '{{.ID}}' ) ${{ env.TAG }}:$( docker image ls -f reference=ts-proxy --format '{{.Tag}}' )
-          docker push ${{ env.TAG }}:$( docker image ls -f reference=ts-proxy --format '{{.Tag}}' )
+          docker build -t "$TAG" .
