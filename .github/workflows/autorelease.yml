@@ -98,8 +98,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
           prerelease: false
-          tag: ${{ github.ref_name }}
-          title: Release ${{ github.ref_name }}
+          tag: ${{ env.RELEASE_VERSION }}
+          title: Release ${{ env.RELEASE_VERSION }}
 
     - uses: svenstaro/upload-release-action@v2
       if: env.RELEASE_VERSION != ''
