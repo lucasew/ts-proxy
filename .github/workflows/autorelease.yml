@@ -37,7 +37,12 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ env.USERNAME }}
         password: ${{ github.token }}
+
     - uses: actions/checkout@v4
+    - name: Setup git config
+      run: |
+        git config user.name actions-bot
+        git config user.email actions-bot@users.noreply.github.com
 
     - name: Update Nix flake
       run: nix flake update
