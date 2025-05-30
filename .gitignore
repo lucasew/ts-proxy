@@ -4,3 +4,4 @@ main
 # nix result link
 result*
 ts-proxyd
+build
