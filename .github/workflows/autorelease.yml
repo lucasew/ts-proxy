@@ -86,10 +86,12 @@ jobs:
       run: |
         if [[ ! -z "$NEW_VERSION" ]]; then
           ./make_release "$NEW_VERSION"
+          echo "New version: $(cat version.txt)" >> $GITHUB_STEP_SUMMARY
+          echo "RELEASE_VERSION=$(cat version.txt)" >> $GITHUB_ENV
         fi
 
     - name: Create relase
-      if: github.ref_type == 'tag'
+      if: env.RELEASE_VERSION != ''
       id: release
       uses: actions/create-release@v1
       env:
@@ -100,7 +102,7 @@ jobs:
           release_name: Release ${{ github.ref_name }}
 
     - uses: svenstaro/upload-release-action@v2
-      if: github.ref_type == 'tag'
+      if: env.RELEASE_VERSION != ''
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: build/*
@@ -111,7 +113,7 @@ jobs:
     - name: "Build and publish container"
       env:
         TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-      if: github.ref_type == 'tag'
+      if: env.RELEASE_VERSION != ''
       run: |
         VERSION="$(cat version.txt)"
         docker build -t "$TAG:$VERSION" .
