@@ -30,3 +30,4 @@ jobs:
         if: github.ref_type == 'tag'
         run: |
           docker build -t "$TAG" .
+          docker push "$TAG"
