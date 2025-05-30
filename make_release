@@ -21,8 +21,8 @@ case "$VERSION" in
 	;;
 esac
 
-echo new version: $VERSION
-exit 0
+# echo new version: $VERSION
+# exit 0
 printf "%s" "$VERSION" > version.txt
 
 git add -A
