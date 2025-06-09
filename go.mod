@@ -4,7 +4,7 @@ go 1.24.0
 
 toolchain go1.24.4
 
-require tailscale.com v1.84.1
+require tailscale.com v1.84.2
 
 require (
 	github.com/akutz/memconn v0.1.0 // indirect
