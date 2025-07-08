@@ -2,7 +2,7 @@ module github.com/lucasew/ts-proxy
 
 go 1.24.0
 
-toolchain go1.24.4
+toolchain go1.24.5
 
 require tailscale.com v1.84.3
 
