@@ -5,5 +5,23 @@
   ],
   "nix": {
     "enabled": true
-  }
+  },
+  "lockFileMaintenance": {
+    "enabled": false,
+    "recreateWhen": "always",
+    "automergeType": "pr",
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "matchPackageNames": "tailscale.com",
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "automerge": true
+    }
+  ]
 }
