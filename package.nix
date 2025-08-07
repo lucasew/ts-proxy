@@ -11,7 +11,7 @@ buildGo124Module {
   env.CGO_ENABLED = 0;
 
   # vendorHash = "sha256:${lib.fakeSha256}";
-  vendorHash = "sha256-pcRu1vViqMRpH+c+2tCpQ3DAZWF8i3czUKHz9ne+DP0=";
+  vendorHash = "sha256-b5SFQbDGyqwlsCUBhxylfIkWsTPcy28NKW0O4AaQzEo=";
 
   postConfigure = ''
     # chmod -R +w vendor/gvisor.dev/gvisor #/pkg/refs/refs_template.go
