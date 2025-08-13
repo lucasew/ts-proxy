@@ -71,7 +71,7 @@ jobs:
         fi
     - uses: actions/setup-go@v5.5.0
       with:
-          go-version: '1.24'
+          go-version: '1.25'
 
     - name: Try to build it
       run: 'nix build .#'
