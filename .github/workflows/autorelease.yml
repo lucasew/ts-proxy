@@ -44,7 +44,7 @@ jobs:
         git config user.name actions-bot
         git config user.email actions-bot@users.noreply.github.com
 
-    - uses: jdx/mise-action@v2
+    - uses: jdx/mise-action@v3
 
     - name: Update Nix flake
       run: nix flake update
