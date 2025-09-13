@@ -3,9 +3,6 @@
   "extends": [
     "config:recommended"
   ],
-  "nix": {
-    "enabled": true
-  },
   "lockFileMaintenance": {
     "enabled": true,
     "recreateWhen": "always",

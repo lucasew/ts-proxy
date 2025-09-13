@@ -27,16 +27,6 @@ jobs:
       id-token: write
       pull-requests: write
     steps:
-    - name: Install Nix
-      uses: cachix/install-nix-action@v31
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
-    - name: Login to registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ env.USERNAME }}
-        password: ${{ github.token }}
 
     - uses: actions/checkout@v5
     - name: Setup git config
@@ -45,12 +35,6 @@ jobs:
         git config user.email actions-bot@users.noreply.github.com
 
     - uses: jdx/mise-action@v3
-
-    - name: Update Nix flake
-      run: nix flake update
-
-    - name: Update Nix hashes
-      run: ./.github/update-nix-hashes.py
 
     - name: Create Pull Request if there is new stuff from updaters
       uses: peter-evans/create-pull-request@v7
@@ -71,10 +55,6 @@ jobs:
           echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
           exit 1
         fi
-
-    - name: Try to build it
-      run: 'nix build .#'
-
 
     - name: Build binaries
       env:
@@ -124,6 +104,14 @@ jobs:
         tag: ${{ env.RELEASE_VERSION }}
         overwrite: true
         file_glob: true
+
+    - name: Login to registry
+      uses: docker/login-action@v3
+      if: env.RELEASE_VERSION != ''
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ env.USERNAME }}
+        password: ${{ github.token }}
 
     - name: "Build and publish container"
       env:
