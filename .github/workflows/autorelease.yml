@@ -75,9 +75,24 @@ jobs:
     - name: Try to build it
       run: 'nix build .#'
 
-    - run: mkdir build -p && ls && pwd
-    - run: GOOS=windows GOARCH=amd64 go build -o build/ts-proxyd-windows-amd64.exe ./cmd/ts-proxyd
-    - run: go build -o build/ts-proxyd-linux-amd64 ./cmd/ts-proxyd
+
+    - name: Build binaries
+      env:
+        TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+      run: |
+        echo "::group::Build container"
+        docker build -t "$TAG:latest" .
+        echo "::endgroup::"
+
+        mkdir build -p && ls && pwd
+
+        echo "# Built targets" >> $GITHUB_STEP_SUMMARY
+        export CGO_ENABLED=0
+        go tool dist list | grep -v wasm | while IFS=/ read -r GOOS GOARCH; do
+          echo "::group::Build $GOOS/$GOARCH"
+          GOOS=$GOOS GOARCH=$GOARCH go build -v -o build/ts-proxyd-$GOOS-$GOARCH ./cmd/ts-proxyd && (echo "- $GOOS/$GOARCH" >> $GITHUB_STEP_SUMMARY) || true
+          echo "::endgroup::"
+        done
 
     - name: Make release if everything looks right
       env:
@@ -116,7 +131,6 @@ jobs:
       if: env.RELEASE_VERSION != ''
       run: |
         VERSION="$(cat version.txt)"
-        docker build -t "$TAG:$VERSION" .
-        docker tag "$TAG:$VERSION" "$TAG:latest"
+        docker tag "$TAG:latest" "$TAG:$VERSION"
         docker push "$TAG:$VERSION"
         docker push "$TAG:latest"
