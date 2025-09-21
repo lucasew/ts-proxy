@@ -59,6 +59,11 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		http.Redirect(w, r, destinationURL.String(), http.StatusMovedPermanently)
 		return
 	}
+	if tps.server.options.EnableTLS {
+		r.Header.Set("X-Forwarded-Proto", "https")
+	} else {
+		r.Header.Set("X-Forwarded-Proto", "http")
+	}
 	log.Printf("%s %s %s %s", r.Method, userInfo.UserProfile.LoginName, r.Host, r.URL.String())
 	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
 	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
