@@ -6,6 +6,9 @@ on:
     - main
     tags:
     - '*'
+  pull_request:
+    branches:
+    - main
   workflow_dispatch:
     inputs:
       new_version:
@@ -36,26 +39,6 @@ jobs:
 
     - uses: jdx/mise-action@v3
 
-    - name: Create Pull Request if there is new stuff from updaters
-      uses: peter-evans/create-pull-request@v7
-      id: pr_create
-      with:
-        commit-message: Updater script changes
-        branch: updater-bot
-        delete-branch: true
-        title: "Updater: stuff changed"
-        body: |
-          Changes caused from update scripts
-
-    - name: Stop if a pull request was created
-      env:
-        PR_NUMBER: ${{ steps.pr_create.outputs.pull-request-number }}
-      run: |
-        if [[ ! -z "$PR_NUMBER" ]]; then
-          echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
-          exit 1
-        fi
-
     - name: Build binaries
       env:
         TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -75,6 +58,7 @@ jobs:
         done
 
     - name: Make release if everything looks right
+      if: github.event_name != 'pull_request'
       env:
         NEW_VERSION: ${{ github.event.inputs.new_version }}
       run: |
@@ -85,7 +69,7 @@ jobs:
         fi
 
     - name: Create relase
-      if: env.RELEASE_VERSION != ''
+      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ env.RELEASE_VERSION }}
@@ -97,7 +81,7 @@ jobs:
           --notes-start-tag $(gh release list --limit 1 --json tagName -q .[].tagName) 
 
     - uses: svenstaro/upload-release-action@v2
-      if: env.RELEASE_VERSION != ''
+      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: build/*
@@ -107,7 +91,7 @@ jobs:
 
     - name: Login to registry
       uses: docker/login-action@v3
-      if: env.RELEASE_VERSION != ''
+      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ env.USERNAME }}
@@ -116,7 +100,7 @@ jobs:
     - name: "Build and publish container"
       env:
         TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-      if: env.RELEASE_VERSION != ''
+      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
       run: |
         VERSION="$(cat version.txt)"
         docker tag "$TAG:latest" "$TAG:$VERSION"
