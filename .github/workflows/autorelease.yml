@@ -39,6 +39,44 @@ jobs:
 
     - uses: jdx/mise-action@v3
 
+    - name: Go get
+      run: go get ./...
+
+    - name: Go fmt
+      run: go fmt ./...
+
+    - name: Create Pull Request if there is new stuff from updaters
+      if: github.event_name != 'pull_request'
+      uses: peter-evans/create-pull-request@v7
+      id: pr_create
+      with:
+        commit-message: Updater script changes
+        branch: updater-bot
+        delete-branch: true
+        title: "Updater: stuff changed"
+        body: |
+          Changes caused from update scripts
+
+    - name: Stop if a pull request was created
+      if: github.event_name != 'pull_request'
+      env:
+        PR_NUMBER: ${{ steps.pr_create.outputs.pull-request-number }}
+      run: |
+        if [[ ! -z "$PR_NUMBER" ]]; then
+          echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+
+    - name: Update PR if there is a missing go get or go fmt
+      if: github.event_name == 'pull_request'
+      run: |
+        if git diff --exit-code; then
+          git add -A
+          git commit -sm "updater: stuff changed"
+          git push
+        fi
+
+
     - name: Build binaries
       env:
         TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
