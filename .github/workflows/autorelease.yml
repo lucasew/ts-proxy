@@ -67,16 +67,6 @@ jobs:
           exit 1
         fi
 
-    - name: Update PR if there is a missing go get or go fmt
-      if: github.event_name == 'pull_request'
-      run: |
-        if git diff --exit-code; then
-          git add -A
-          git commit -sm "updater: stuff changed"
-          git push
-        fi
-
-
     - name: Build binaries
       env:
         TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
