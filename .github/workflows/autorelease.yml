@@ -47,36 +47,15 @@ jobs:
 
     - name: Create Pull Request if there is new stuff from updaters
       if: github.event_name != 'pull_request'
+      uses: peter-evans/create-pull-request@v7
       id: pr_create
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Check if there are any changes
-        if [[ -z "$(git status --porcelain)" ]]; then
-          echo "No changes detected"
-          echo "pull-request-number=" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        # Commit and push changes
-        git checkout -b updater-bot
-        git add .
-        git commit -m "Updater script changes"
-        git push -f origin updater-bot
-
-        # Create or update PR
-        PR_NUMBER=$(gh pr create \
-          --title "Updater: stuff changed" \
-          --body "Changes caused from update scripts" \
-          --base main \
-          --head updater-bot 2>&1 | grep -oP '(?<=pull/)\d+' || true)
-
-        # If PR already exists, get its number
-        if [[ -z "$PR_NUMBER" ]]; then
-          PR_NUMBER=$(gh pr list --head updater-bot --json number --jq '.[0].number' || true)
-        fi
-
-        echo "pull-request-number=$PR_NUMBER" >> $GITHUB_OUTPUT
+      with:
+        commit-message: Updater script changes
+        branch: updater-bot
+        delete-branch: true
+        title: "Updater: stuff changed"
+        body: |
+          Changes caused from update scripts
 
     - name: Stop if a pull request was created
       if: github.event_name != 'pull_request'
