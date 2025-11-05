@@ -19,8 +19,13 @@ on:
           - minor
           - major
         default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
   schedule:
-    - cron: '0 2 * * 6' # saturday 2am
+  - cron: '0 2 * * 6'   # saturday 2am
 jobs:
   autorelease:
     env:
@@ -104,9 +109,9 @@ jobs:
     - name: Create relase
       if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
       env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ env.RELEASE_VERSION }}
-          TITLE: Release ${{ env.RELEASE_VERSION }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ env.RELEASE_VERSION }}
+        TITLE: Release ${{ env.RELEASE_VERSION }}
       run: |
         gh release create "$TAG" \
           --title "$TITLE" \
