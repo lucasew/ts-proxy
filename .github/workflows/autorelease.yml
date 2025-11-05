@@ -13,6 +13,11 @@ on:
     inputs:
       new_version:
         description: 'New tag version'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
         default: 'patch'
   schedule:
     - cron: '0 2 * * 6' # saturday 2am
