@@ -14,12 +14,7 @@ on:
       new_version:
         description: 'New tag version'
         type: choice
-        options:
-          - patch
-          - minor
-          - major
         default: 'patch'
-        type: choice
         options:
         - patch
         - minor
