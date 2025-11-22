@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS build-env
+FROM golang:1.25-alpine@sha256:d3f0cf7723f3429e3f9ed846243970b20a2de7bae6a5b66fc5914e228d831bbb AS build-env
 
 WORKDIR /go/src/ts-proxy
 
