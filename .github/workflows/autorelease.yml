@@ -84,7 +84,7 @@ jobs:
 
         echo "# Built targets" >> $GITHUB_STEP_SUMMARY
         export CGO_ENABLED=0
-        go tool dist list | grep -v wasm | while IFS=/ read -r GOOS GOARCH; do
+        go tool dist list | grep -vE 'wasm|aix|plan9|android|ios|illumos|solaris|dragonfly' | while IFS=/ read -r GOOS GOARCH; do
           echo "::group::Build $GOOS/$GOARCH"
           GOOS=$GOOS GOARCH=$GOARCH go build -v -o build/ts-proxyd-$GOOS-$GOARCH ./cmd/ts-proxyd && (echo "- $GOOS/$GOARCH" >> $GITHUB_STEP_SUMMARY) || true
           echo "::endgroup::"
