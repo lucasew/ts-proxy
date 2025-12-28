@@ -1,25 +1,25 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>lewtec/renovate-config:base",
-    "config:recommended"
+    "config:recommended",
+    "github>lewtec/renovate-config:base"
   ],
   "lockFileMaintenance": {
-    "enabled": true,
-    "recreateWhen": "always",
+    "automerge": true,
     "automergeType": "pr",
-    "automerge": true
+    "enabled": true,
+    "recreateWhen": "always"
   },
   "packageRules": [
     {
-      "matchPackageNames": "tailscale.com",
-      "automerge": true
+      "automerge": true,
+      "matchPackageNames": "tailscale.com"
     },
     {
+      "automerge": true,
       "matchUpdateTypes": [
         "patch"
-      ],
-      "automerge": true
+      ]
     }
   ]
 }
