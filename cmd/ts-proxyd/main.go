@@ -5,10 +5,9 @@ import (
 	"log"
 
 	"github.com/davecgh/go-spew/spew"
-	tsproxy "github.com/lucasew/ts-proxy"
 )
 
-var options tsproxy.TailscaleProxyServerOptions
+var options TailscaleProxyServerOptions
 
 func init() {
 	var err error
@@ -39,7 +38,7 @@ func init() {
 }
 
 func main() {
-	server, err := tsproxy.NewTailscaleProxyServer(options)
+	server, err := NewTailscaleProxyServer(options)
 	if err != nil {
 		panic(err)
 	}
