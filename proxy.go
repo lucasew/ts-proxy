@@ -3,7 +3,7 @@ package tsproxy
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 
 	"os"
@@ -119,7 +119,7 @@ func (tps *TailscaleProxyServer) WhoIs(ctx context.Context, remoteAddr string) (
 
 func (tps *TailscaleProxyServer) handleError(err error) bool {
 	if err != nil {
-		log.Printf("FATAL ERROR: %s\n", err.Error())
+		slog.Error("FATAL ERROR", "err", err)
 		tps.cancel()
 	}
 	return err != nil

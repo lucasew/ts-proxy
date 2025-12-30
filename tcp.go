@@ -2,7 +2,7 @@ package tsproxy
 
 import (
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 )
@@ -25,10 +25,10 @@ func (tps *TailscaleTCPProxyServer) Serve(ln net.Listener) error {
 		default:
 			conn, err := ln.Accept()
 			if err != nil {
-				log.Printf("error/accept: %s", err.Error())
+				slog.Error("error/accept", "err", err)
 				continue
 			}
-			log.Printf("got tcp conn")
+			slog.Info("got tcp conn")
 			go handleTCPConn(tps.server, conn, nil)
 		}
 	}
@@ -47,9 +47,9 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 	if c2 == nil {
 		c2, err = server.Dial("whatever", "whatever")
 		if err != nil {
-			log.Print(err)
+			slog.Error("tcp error", "err", err)
 			c1.Close()
-			log.Printf("disconnected %v", c1.RemoteAddr())
+			slog.Info("disconnected", "remote_addr", c1.RemoteAddr())
 			return
 		}
 
@@ -64,11 +64,11 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 		select {
 		case first <- struct{}{}:
 			if err != nil {
-				log.Print(err)
+				slog.Error("tcp error", "err", err)
 			}
 			dst.Close()
 			src.Close()
-			log.Printf("disconnected %v", c1.RemoteAddr())
+			slog.Info("disconnected", "remote_addr", c1.RemoteAddr())
 		default:
 		}
 	}
