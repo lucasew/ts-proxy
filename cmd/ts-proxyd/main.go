@@ -2,7 +2,8 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
+	"os"
 
 	tsproxy "github.com/lucasew/ts-proxy"
 )
@@ -31,8 +32,21 @@ func init() {
 	if options.Listen == "" {
 		panic("-listen not defined")
 	}
+
+	slog.Info("configuration",
+		"network", options.Network,
+		"address", options.Address,
+		"hostname", options.Hostname,
+		"funnel", options.EnableFunnel,
+		"tls", options.EnableTLS,
+		"statedir", options.StateDir,
+		"listen", options.Listen,
+		"http", options.EnableHTTP,
+	)
+
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Fatal error", "err", err)
+		os.Exit(1)
 	}
 }
 

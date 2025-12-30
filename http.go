@@ -1,7 +1,7 @@
 package tsproxy
 
 import (
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -36,7 +36,7 @@ func (tps *TailscaleHTTPProxyServer) Serve(l net.Listener) error {
 func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := tps.server.WhoIs(r.Context(), r.RemoteAddr)
 	if err != nil {
-		log.Printf("error/http/ts-auth: %s", err.Error())
+		slog.Error("error/http/ts-auth", "err", err)
 		w.WriteHeader(500)
 		return
 	}
@@ -49,7 +49,7 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		} else {
 			destinationURL.Scheme = "http"
 		}
-		log.Printf("redirect: '%s' -> '%s'", r.URL.String(), destinationURL.String())
+		slog.Info("redirect", "from", r.URL.String(), "to", destinationURL.String())
 		http.Redirect(w, r, destinationURL.String(), http.StatusMovedPermanently)
 		return
 	}
@@ -59,6 +59,7 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 	} else {
 		r.Header.Set("X-Forwarded-Proto", "http")
 	}
+	slog.Info("request", "method", r.Method, "user", userInfo.UserProfile.LoginName, "host", r.Host, "url", r.URL.String())
 	log.Printf("%s %s %s %s", r.Method, userInfo.UserProfile.LoginName, r.Host, r.URL.String())
 	r.Header.Del("Tailscale-User-Login")
 	r.Header.Del("Tailscale-User-Name")
