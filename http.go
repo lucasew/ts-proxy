@@ -60,6 +60,11 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		r.Header.Set("X-Forwarded-Proto", "http")
 	}
 	slog.Info("request", "method", r.Method, "user", userInfo.UserProfile.LoginName, "host", r.Host, "url", r.URL.String())
+	log.Printf("%s %s %s %s", r.Method, userInfo.UserProfile.LoginName, r.Host, r.URL.String())
+	r.Header.Del("Tailscale-User-Login")
+	r.Header.Del("Tailscale-User-Name")
+	r.Header.Del("Tailscale-User-Profile-Pic")
+	r.Header.Del("Tailscale-Headers-Info")
 	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
 	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
 	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
