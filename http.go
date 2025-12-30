@@ -6,13 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-
-	"github.com/davecgh/go-spew/spew"
 )
-
-func init() {
-	_ = spew.Dump
-}
 
 type TailscaleHTTPProxyServer struct {
 	server *TailscaleProxyServer

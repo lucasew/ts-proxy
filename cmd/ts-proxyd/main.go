@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 
-	"github.com/davecgh/go-spew/spew"
 	tsproxy "github.com/lucasew/ts-proxy"
 )
 
@@ -29,7 +28,6 @@ func init() {
 			options.Listen = ":80"
 		}
 	}
-	spew.Dump(options)
 	if options.Listen == "" {
 		panic("-listen not defined")
 	}
