@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 )
 
 type TailscaleHTTPProxyServer struct {
@@ -29,7 +30,13 @@ func NewTailscaleHTTPProxyServer(server *TailscaleProxyServer) (Server, error) {
 }
 
 func (tps *TailscaleHTTPProxyServer) Serve(l net.Listener) error {
-	server := http.Server{Handler: tps}
+	server := http.Server{
+		Handler:           tps,
+		ReadHeaderTimeout: 15 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	return server.Serve(l)
 }
 
