@@ -3,6 +3,7 @@ package tsproxy
 import (
 	"log/slog"
 	"net"
+	"tailscale.com/client/tailscale/apitype"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -67,6 +68,11 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		r.Header.Set("X-Forwarded-Proto", "http")
 	}
 	slog.Info("request", "method", r.Method, "user", userInfo.UserProfile.LoginName, "host", r.Host, "url", r.URL.String())
+	setTailscaleHeaders(r, userInfo)
+	tps.proxy.ServeHTTP(w, r)
+}
+
+func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
 	r.Header.Del("Tailscale-User-Login")
 	r.Header.Del("Tailscale-User-Name")
 	r.Header.Del("Tailscale-User-Profile-Pic")
@@ -75,5 +81,4 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
 	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
 	r.Header.Set("Tailscale-Headers-Info", "https://tailscale.com/s/serve-headers")
-	tps.proxy.ServeHTTP(w, r)
 }
