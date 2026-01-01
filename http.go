@@ -3,10 +3,10 @@ package tsproxy
 import (
 	"log/slog"
 	"net"
-	"tailscale.com/client/tailscale/apitype"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"tailscale.com/client/tailscale/apitype"
 	"time"
 )
 
