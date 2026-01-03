@@ -73,12 +73,27 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
+	// Defensively clear all known variants of the headers before setting them.
+	// This prevents a client from spoofing headers that a backend might interpret
+	// (e.g., Apache/PHP converting "Tailscale-User-Login" to "TAILSCALE_USER_LOGIN").
+
+	// Set Tailscale-User-Login
 	r.Header.Del("Tailscale-User-Login")
-	r.Header.Del("Tailscale-User-Name")
-	r.Header.Del("Tailscale-User-Profile-Pic")
-	r.Header.Del("Tailscale-Headers-Info")
+	r.Header.Del("Tailscale_User_Login")
 	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
+
+	// Set Tailscale-User-Name
+	r.Header.Del("Tailscale-User-Name")
+	r.Header.Del("Tailscale_User_Name")
 	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
+
+	// Set Tailscale-User-Profile-Pic
+	r.Header.Del("Tailscale-User-Profile-Pic")
+	r.Header.Del("Tailscale_User_Profile_Pic")
 	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
+
+	// Set Tailscale-Headers-Info
+	r.Header.Del("Tailscale-Headers-Info")
+	r.Header.Del("Tailscale_Headers_Info")
 	r.Header.Set("Tailscale-Headers-Info", "https://tailscale.com/s/serve-headers")
 }
