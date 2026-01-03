@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	tcpBufferSize = 1 << 15
+	TCPBufferSize = 1 << 15
 )
 
 type TailscaleTCPProxyServer struct {
@@ -42,7 +42,7 @@ var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// TODO maybe different buffer size?
 		// benchmark pls
-		return make([]byte, tcpBufferSize)
+		return make([]byte, TCPBufferSize)
 	},
 }
 
