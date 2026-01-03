@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"tailscale.com/client/tailscale/apitype"
 	"time"
 )
@@ -73,27 +74,29 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	// Defensively clear all known variants of the headers before setting them.
-	// This prevents a client from spoofing headers that a backend might interpret
-	// (e.g., Apache/PHP converting "Tailscale-User-Login" to "TAILSCALE_USER_LOGIN").
+	// To prevent header spoofing, iterate over all incoming headers and
+	// remove any that could be interpreted as Tailscale identity headers
+	// by a backend. We normalize headers by lowercasing and replacing
+	// underscores with hyphens before comparison.
+	headersToSanitize := map[string]struct{}{
+		"tailscale-user-login":      {},
+		"tailscale-user-name":       {},
+		"tailscale-user-profile-pic": {},
+		"tailscale-headers-info":    {},
+	}
 
-	// Set Tailscale-User-Login
-	r.Header.Del("Tailscale-User-Login")
-	r.Header.Del("Tailscale_User_Login")
+	for headerName := range r.Header {
+		normalizedHeader := strings.ToLower(headerName)
+		normalizedHeader = strings.ReplaceAll(normalizedHeader, "_", "-")
+		if _, found := headersToSanitize[normalizedHeader]; found {
+			r.Header.Del(headerName)
+		}
+	}
+
+	// Now that all potentially conflicting headers are removed, set the
+	// authoritative headers from the verified Tailscale identity.
 	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
-
-	// Set Tailscale-User-Name
-	r.Header.Del("Tailscale-User-Name")
-	r.Header.Del("Tailscale_User_Name")
 	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
-
-	// Set Tailscale-User-Profile-Pic
-	r.Header.Del("Tailscale-User-Profile-Pic")
-	r.Header.Del("Tailscale_User_Profile_Pic")
 	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
-
-	// Set Tailscale-Headers-Info
-	r.Header.Del("Tailscale-Headers-Info")
-	r.Header.Del("Tailscale_Headers_Info")
 	r.Header.Set("Tailscale-Headers-Info", "https://tailscale.com/s/serve-headers")
 }
