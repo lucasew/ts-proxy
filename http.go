@@ -67,6 +67,8 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 	} else {
 		r.Header.Set("X-Forwarded-Proto", "http")
 	}
+	r.Header.Del("X-Forwarded-Host")
+	r.Header.Set("X-Forwarded-Host", tps.server.Hostname())
 	slog.Info("request", "method", r.Method, "user", userInfo.UserProfile.LoginName, "host", r.Host, "url", r.URL.String())
 	setTailscaleHeaders(r, userInfo)
 	tps.proxy.ServeHTTP(w, r)
