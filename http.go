@@ -73,10 +73,17 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del("Tailscale-User-Login")
-	r.Header.Del("Tailscale-User-Name")
-	r.Header.Del("Tailscale-User-Profile-Pic")
-	r.Header.Del("Tailscale-Headers-Info")
+	headersToClean := []string{
+		"Tailscale-User-Login",
+		"Tailscale-User-Name",
+		"Tailscale-User-Profile-Pic",
+		"Tailscale-Headers-Info",
+	}
+
+	for _, header := range headersToClean {
+		r.Header.Del(header)
+	}
+
 	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
 	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
 	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
