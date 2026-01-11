@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+const (
+	TailscaleUserLoginHeader      = "Tailscale-User-Login"
+	TailscaleUserNameHeader       = "Tailscale-User-Name"
+	TailscaleUserProfilePicHeader = "Tailscale-User-Profile-Pic"
+	TailscaleHeadersInfoHeader    = "Tailscale-Headers-Info"
+)
+
 type TailscaleHTTPProxyServer struct {
 	server *TailscaleProxyServer
 	proxy  *httputil.ReverseProxy
@@ -75,12 +82,12 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del("Tailscale-User-Login")
-	r.Header.Del("Tailscale-User-Name")
-	r.Header.Del("Tailscale-User-Profile-Pic")
-	r.Header.Del("Tailscale-Headers-Info")
-	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
-	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
-	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
-	r.Header.Set("Tailscale-Headers-Info", "https://tailscale.com/s/serve-headers")
+	r.Header.Del(TailscaleUserLoginHeader)
+	r.Header.Del(TailscaleUserNameHeader)
+	r.Header.Del(TailscaleUserProfilePicHeader)
+	r.Header.Del(TailscaleHeadersInfoHeader)
+	r.Header.Set(TailscaleUserLoginHeader, userInfo.UserProfile.LoginName)
+	r.Header.Set(TailscaleUserNameHeader, userInfo.UserProfile.DisplayName)
+	r.Header.Set(TailscaleUserProfilePicHeader, userInfo.UserProfile.ProfilePicURL)
+	r.Header.Set(TailscaleHeadersInfoHeader, "https://tailscale.com/s/serve-headers")
 }
