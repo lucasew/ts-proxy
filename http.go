@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"tailscale.com/client/tailscale/apitype"
 	"time"
 )
@@ -75,10 +76,23 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del("Tailscale-User-Login")
-	r.Header.Del("Tailscale-User-Name")
-	r.Header.Del("Tailscale-User-Profile-Pic")
-	r.Header.Del("Tailscale-Headers-Info")
+	// Prevent spoofing by sanitizing all incoming headers that could be
+	// interpreted as Tailscale identity headers. Iterate over all headers to
+	// find and remove potential spoofs.
+	for header := range r.Header {
+		// Normalize the header to lowercase and replace underscores with hyphens,
+		// which is how some servers (e.g., PHP with Apache) might see them.
+		normalizedHeader := strings.ToLower(strings.ReplaceAll(header, "_", "-"))
+
+		// If the normalized header matches a protected Tailscale header, delete
+		// the original header from the request.
+		switch normalizedHeader {
+		case "tailscale-user-login", "tailscale-user-name", "tailscale-user-profile-pic", "tailscale-headers-info":
+			r.Header.Del(header)
+		}
+	}
+
+	// After sanitizing, set the authoritative Tailscale headers.
 	r.Header.Set("Tailscale-User-Login", userInfo.UserProfile.LoginName)
 	r.Header.Set("Tailscale-User-Name", userInfo.UserProfile.DisplayName)
 	r.Header.Set("Tailscale-User-Profile-Pic", userInfo.UserProfile.ProfilePicURL)
