@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"tailscale.com/client/tailscale/apitype"
+	"strings"
 	"time"
+
+	"tailscale.com/client/tailscale/apitype"
 )
 
 const (
@@ -82,10 +84,20 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del(TailscaleUserLoginHeader)
-	r.Header.Del(TailscaleUserNameHeader)
-	r.Header.Del(TailscaleUserProfilePicHeader)
-	r.Header.Del(TailscaleHeadersInfoHeader)
+	// Sanitize headers to prevent spoofing.
+	// We iterate over all headers and remove any that normalize to a Tailscale header.
+	// This protects against variations like "tailscale-user-login" or "Tailscale_User_Name".
+	for k := range r.Header {
+		normalized := strings.ToLower(strings.ReplaceAll(k, "_", "-"))
+		switch normalized {
+		case "tailscale-user-login",
+			"tailscale-user-name",
+			"tailscale-user-profile-pic",
+			"tailscale-headers-info":
+			delete(r.Header, k)
+		}
+	}
+
 	r.Header.Set(TailscaleUserLoginHeader, userInfo.UserProfile.LoginName)
 	r.Header.Set(TailscaleUserNameHeader, userInfo.UserProfile.DisplayName)
 	r.Header.Set(TailscaleUserProfilePicHeader, userInfo.UserProfile.ProfilePicURL)
