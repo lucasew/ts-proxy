@@ -265,3 +265,5 @@ tailscale.com v1.92.5 h1:h88HqtGk8jd9umF7l6m/8+QK69dY9IVMIlkNK9XYpvQ=
 tailscale.com v1.92.5/go.mod h1:jzTfKDd6XNNSNoX+Q9INIMpMU5rfZ9g8ojcAoMKi5w0=
 tailscale.com v1.94.0 h1:5oW3SF35aU9ekHDhP2J4CHewnA2NxE7SRilDB2pVjaA=
 tailscale.com v1.94.0/go.mod h1:gLnVrEOP32GWvroaAHHGhjSGMPJ1i4DvqNwEg+Yuov4=
+tailscale.com v1.94.1 h1:0dAst/ozTuFkgmxZULc3oNwR9+qPIt5ucvzH7kaM0Jw=
+tailscale.com v1.94.1/go.mod h1:gLnVrEOP32GWvroaAHHGhjSGMPJ1i4DvqNwEg+Yuov4=
