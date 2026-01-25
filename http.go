@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"tailscale.com/client/tailscale/apitype"
 	"time"
 )
@@ -82,10 +83,15 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del(TailscaleUserLoginHeader)
-	r.Header.Del(TailscaleUserNameHeader)
-	r.Header.Del(TailscaleUserProfilePicHeader)
-	r.Header.Del(TailscaleHeadersInfoHeader)
+	for k := range r.Header {
+		normalized := strings.ReplaceAll(k, "_", "-")
+		if strings.EqualFold(normalized, TailscaleUserLoginHeader) ||
+			strings.EqualFold(normalized, TailscaleUserNameHeader) ||
+			strings.EqualFold(normalized, TailscaleUserProfilePicHeader) ||
+			strings.EqualFold(normalized, TailscaleHeadersInfoHeader) {
+			delete(r.Header, k)
+		}
+	}
 	r.Header.Set(TailscaleUserLoginHeader, userInfo.UserProfile.LoginName)
 	r.Header.Set(TailscaleUserNameHeader, userInfo.UserProfile.DisplayName)
 	r.Header.Set(TailscaleUserProfilePicHeader, userInfo.UserProfile.ProfilePicURL)
