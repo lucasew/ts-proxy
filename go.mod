@@ -2,7 +2,7 @@ module github.com/lucasew/ts-proxy
 
 go 1.25.5
 
-require tailscale.com v1.94.0
+require tailscale.com v1.94.1
 
 require (
 	github.com/akutz/memconn v0.1.0 // indirect
