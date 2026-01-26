@@ -16,6 +16,12 @@ const (
 	TailscaleUserNameHeader       = "Tailscale-User-Name"
 	TailscaleUserProfilePicHeader = "Tailscale-User-Profile-Pic"
 	TailscaleHeadersInfoHeader    = "Tailscale-Headers-Info"
+
+	HeaderXForwardedProto = "X-Forwarded-Proto"
+	HeaderXForwardedHost  = "X-Forwarded-Host"
+
+	SchemeHTTP  = "http"
+	SchemeHTTPS = "https"
 )
 
 type TailscaleHTTPProxyServer struct {
@@ -56,30 +62,41 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 		w.WriteHeader(500)
 		return
 	}
+	if tps.handleRedirect(w, r) {
+		return
+	}
+	tps.enrichHeaders(r, userInfo)
+	tps.proxy.ServeHTTP(w, r)
+}
+
+func (tps *TailscaleHTTPProxyServer) handleRedirect(w http.ResponseWriter, r *http.Request) bool {
 	if r.URL.Hostname() != "" && r.URL.Hostname() != tps.server.Hostname() {
 		destinationURL := new(url.URL)
 		*destinationURL = *r.URL
 		destinationURL.Host = tps.server.Hostname() + tps.server.options.Listen
 		if tps.server.options.EnableTLS {
-			destinationURL.Scheme = "https"
+			destinationURL.Scheme = SchemeHTTPS
 		} else {
-			destinationURL.Scheme = "http"
+			destinationURL.Scheme = SchemeHTTP
 		}
 		slog.Info("redirect", "from", r.URL.String(), "to", destinationURL.String())
 		http.Redirect(w, r, destinationURL.String(), http.StatusMovedPermanently)
-		return
+		return true
 	}
-	r.Header.Del("X-Forwarded-Proto")
+	return false
+}
+
+func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
+	r.Header.Del(HeaderXForwardedProto)
 	if tps.server.options.EnableTLS {
-		r.Header.Set("X-Forwarded-Proto", "https")
+		r.Header.Set(HeaderXForwardedProto, SchemeHTTPS)
 	} else {
-		r.Header.Set("X-Forwarded-Proto", "http")
+		r.Header.Set(HeaderXForwardedProto, SchemeHTTP)
 	}
-	r.Header.Del("X-Forwarded-Host")
-	r.Header.Set("X-Forwarded-Host", tps.server.Hostname())
+	r.Header.Del(HeaderXForwardedHost)
+	r.Header.Set(HeaderXForwardedHost, tps.server.Hostname())
 	slog.Info("request", "method", r.Method, "user", userInfo.UserProfile.LoginName, "host", r.Host, "url", r.URL.String())
 	setTailscaleHeaders(r, userInfo)
-	tps.proxy.ServeHTTP(w, r)
 }
 
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
