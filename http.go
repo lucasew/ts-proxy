@@ -24,11 +24,24 @@ const (
 	SchemeHTTPS = "https"
 )
 
+/**
+ * TailscaleHTTPProxyServer is an L7 HTTP proxy implementation.
+ * It wraps the generic httputil.ReverseProxy to add Tailscale-specific features:
+ * - Authentication (WhoIs)
+ * - Header injection (Identity, X-Forwarded-*)
+ * - Canonical hostname enforcement
+ */
 type TailscaleHTTPProxyServer struct {
 	server *TailscaleProxyServer
 	proxy  *httputil.ReverseProxy
 }
 
+/**
+ * NewTailscaleHTTPProxyServer creates a new HTTP proxy instance.
+ * It configures a standard SingleHostReverseProxy but overrides the Transport
+ * to use the TailscaleProxyServer's Dial method, ensuring all traffic
+ * is routed to the configured upstream address.
+ */
 func NewTailscaleHTTPProxyServer(server *TailscaleProxyServer) (Server, error) {
 	u := &url.URL{
 		Scheme: "http",
@@ -44,6 +57,10 @@ func NewTailscaleHTTPProxyServer(server *TailscaleProxyServer) (Server, error) {
 	}, nil
 }
 
+/**
+ * Serve starts the HTTP server on the provided listener.
+ * It configures conservative timeouts to protect against Slowloris-style attacks.
+ */
 func (tps *TailscaleHTTPProxyServer) Serve(l net.Listener) error {
 	server := http.Server{
 		Handler:           tps,
@@ -55,6 +72,14 @@ func (tps *TailscaleHTTPProxyServer) Serve(l net.Listener) error {
 	return server.Serve(l)
 }
 
+/**
+ * ServeHTTP handles individual HTTP requests.
+ * The flow is as follows:
+ * 1. Authenticate the request using Tailscale's WhoIs (maps IP to user identity).
+ * 2. Enforce canonical hostname via redirection if necessary.
+ * 3. Sanitize and inject identity headers.
+ * 4. Forward the request to the upstream service.
+ */
 func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := tps.server.WhoIs(r.Context(), r.RemoteAddr)
 	if err != nil {
@@ -69,6 +94,13 @@ func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Re
 	tps.proxy.ServeHTTP(w, r)
 }
 
+/**
+ * handleRedirect enforces that requests are made to the canonical hostname.
+ * If a request comes in for a different hostname (e.g., via a CNAME or IP),
+ * it redirects the client to the configured Tailscale hostname.
+ *
+ * @returns true if a redirect was sent, false otherwise.
+ */
 func (tps *TailscaleHTTPProxyServer) handleRedirect(w http.ResponseWriter, r *http.Request) bool {
 	if r.URL.Hostname() != "" && r.URL.Hostname() != tps.server.Hostname() {
 		destinationURL := new(url.URL)
@@ -86,6 +118,11 @@ func (tps *TailscaleHTTPProxyServer) handleRedirect(w http.ResponseWriter, r *ht
 	return false
 }
 
+/**
+ * enrichHeaders prepares the request headers for the upstream service.
+ * It handles standard proxy headers (X-Forwarded-Proto, X-Forwarded-Host)
+ * and delegates Tailscale-specific header injection.
+ */
 func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
 	r.Header.Del(HeaderXForwardedProto)
 	if tps.server.options.EnableTLS {
@@ -99,6 +136,14 @@ func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *ap
 	setTailscaleHeaders(r, userInfo)
 }
 
+/**
+ * setTailscaleHeaders securely injects Tailscale identity headers.
+ *
+ * CRITICAL SECURITY:
+ * Before setting headers, it iterates through ALL existing request headers
+ * to delete any that might be spoofing Tailscale headers (including underscore variations).
+ * Only after sanitization are the authoritative headers set.
+ */
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
 	for k := range r.Header {
 		normalized := strings.ReplaceAll(k, "_", "-")
