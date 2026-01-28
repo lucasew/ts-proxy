@@ -21,7 +21,7 @@ func (tps *TailscaleTCPProxyServer) Serve(ln net.Listener) error {
 	for {
 		select {
 		case <-tps.server.ctx.Done():
-			break
+			return nil
 		default:
 			conn, err := ln.Accept()
 			if err != nil {
