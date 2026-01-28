@@ -7,16 +7,28 @@ import (
 	"sync"
 )
 
+/**
+ * TailscaleTCPProxyServer implements a raw L4 TCP proxy.
+ * It accepts connections from the Tailscale listener and tunnels them
+ * directly to the upstream service without inspecting the payload.
+ */
 type TailscaleTCPProxyServer struct {
 	server *TailscaleProxyServer
 }
 
+/**
+ * NewTailscaleTCPProxyServer creates a new TCP proxy instance.
+ */
 func NewTailscaleTCPProxyServer(server *TailscaleProxyServer) Server {
 	return &TailscaleTCPProxyServer{
 		server: server,
 	}
 }
 
+/**
+ * Serve accepts incoming TCP connections and spawns a goroutine for each.
+ * It runs until the parent context is canceled.
+ */
 func (tps *TailscaleTCPProxyServer) Serve(ln net.Listener) error {
 	for {
 		select {
@@ -42,6 +54,16 @@ var bufferPool = sync.Pool{
 	},
 }
 
+/**
+ * handleTCPConn manages the bidirectional data flow between two connections.
+ *
+ * If the upstream connection (c2) is not provided, it dials the upstream
+ * using the server's configuration.
+ *
+ * It spawns two copy routines: client->upstream and upstream->client.
+ * Whichever side closes or errors first triggers the closure of both connections,
+ * ensuring no resources are leaked.
+ */
 func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 	var err error
 	if c2 == nil {
