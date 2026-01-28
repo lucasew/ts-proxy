@@ -99,18 +99,44 @@ func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *ap
 	setTailscaleHeaders(r, userInfo)
 }
 
+type tailscaleHeaderDef struct {
+	Name  string
+	Value func(*apitype.WhoIsResponse) string
+}
+
+var tailscaleHeaderDefs = []tailscaleHeaderDef{
+	{
+		Name:  TailscaleUserLoginHeader,
+		Value: func(u *apitype.WhoIsResponse) string { return u.UserProfile.LoginName },
+	},
+	{
+		Name:  TailscaleUserNameHeader,
+		Value: func(u *apitype.WhoIsResponse) string { return u.UserProfile.DisplayName },
+	},
+	{
+		Name:  TailscaleUserProfilePicHeader,
+		Value: func(u *apitype.WhoIsResponse) string { return u.UserProfile.ProfilePicURL },
+	},
+	{
+		Name:  TailscaleHeadersInfoHeader,
+		Value: func(u *apitype.WhoIsResponse) string { return "https://tailscale.com/s/serve-headers" },
+	},
+}
+
 func setTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
+	// Sanitize headers
 	for k := range r.Header {
 		normalized := strings.ReplaceAll(k, "_", "-")
-		if strings.EqualFold(normalized, TailscaleUserLoginHeader) ||
-			strings.EqualFold(normalized, TailscaleUserNameHeader) ||
-			strings.EqualFold(normalized, TailscaleUserProfilePicHeader) ||
-			strings.EqualFold(normalized, TailscaleHeadersInfoHeader) {
-			delete(r.Header, k)
+		for _, def := range tailscaleHeaderDefs {
+			if strings.EqualFold(normalized, def.Name) {
+				delete(r.Header, k)
+				break
+			}
 		}
 	}
-	r.Header.Set(TailscaleUserLoginHeader, userInfo.UserProfile.LoginName)
-	r.Header.Set(TailscaleUserNameHeader, userInfo.UserProfile.DisplayName)
-	r.Header.Set(TailscaleUserProfilePicHeader, userInfo.UserProfile.ProfilePicURL)
-	r.Header.Set(TailscaleHeadersInfoHeader, "https://tailscale.com/s/serve-headers")
+
+	// Set authoritative headers
+	for _, def := range tailscaleHeaderDefs {
+		r.Header.Set(def.Name, def.Value(userInfo))
+	}
 }
