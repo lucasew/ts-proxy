@@ -61,11 +61,13 @@ func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscalePro
 	}
 	s.Hostname = options.Hostname
 	if options.Address == "" {
+		cancel()
 		return nil, ErrInvalidUpstream
 	}
 	if options.StateDir != "" {
 		err := os.MkdirAll(options.StateDir, 0700)
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 		s.Dir = options.StateDir
@@ -130,7 +132,7 @@ func (tps *TailscaleProxyServer) Run() {
 	if tps.handleError(err) {
 		return
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	server := NewTailscaleTCPProxyServer(tps)
 	if tps.options.EnableHTTP {
 		server, err = NewTailscaleHTTPProxyServer(tps)
@@ -138,5 +140,5 @@ func (tps *TailscaleProxyServer) Run() {
 			return
 		}
 	}
-	server.Serve(ln)
+	tps.handleError(server.Serve(ln))
 }

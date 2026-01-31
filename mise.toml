@@ -1,2 +1,61 @@
 [tools]
 go = "1.25.6"
+golangci-lint = "latest"
+
+[tasks."lint:golangci-lint"]
+run = "golangci-lint run ./..."
+
+[tasks.lint]
+depends = ["lint:*"]
+
+[tasks."fmt:go"]
+run = "go fmt ./..."
+
+[tasks.fmt]
+depends = ["fmt:*"]
+
+[tasks.test]
+run = "go test -count=1 ./..."
+
+[tasks.codegen]
+run = "go generate ./..."
+
+[tasks.install]
+run = "go mod download"
+
+[tasks.ci]
+depends = ["lint", "test"]
+
+[tasks.build]
+description = "Build the binaries for release"
+run = """
+#!/bin/bash
+set -e
+mkdir -p build
+export CGO_ENABLED=0
+go tool dist list | grep -vE 'wasm|aix|plan9|android|ios|illumos|solaris|dragonfly' | while IFS=/ read -r GOOS GOARCH; do
+    echo "Building $GOOS/$GOARCH"
+    GOOS=$GOOS GOARCH=$GOARCH go build -v -o build/ts-proxyd-$GOOS-$GOARCH ./cmd/ts-proxyd
+done
+"""
+
+[tasks."docker:build"]
+description = "Build docker image"
+run = """
+#!/bin/bash
+TAG="${REGISTRY:-ghcr.io}/${IMAGE_NAME:-lucasew/ts-proxy}"
+docker build -t "$TAG:latest" .
+"""
+
+[tasks."docker:push"]
+description = "Push docker image"
+run = """
+#!/bin/bash
+TAG="${REGISTRY:-ghcr.io}/${IMAGE_NAME:-lucasew/ts-proxy}"
+VERSION="${VERSION:-latest}"
+docker tag "$TAG:latest" "$TAG:$VERSION"
+docker push "$TAG:$VERSION"
+if [ "$VERSION" != "latest" ]; then
+    docker push "$TAG:latest"
+fi
+"""
