@@ -3,15 +3,13 @@ package main
 import (
 	"flag"
 	"log/slog"
-	"os"
 
 	tsproxy "github.com/lucasew/ts-proxy"
 )
 
-var options tsproxy.TailscaleProxyServerOptions
+func main() {
+	var options tsproxy.TailscaleProxyServerOptions
 
-func init() {
-	var err error
 	flag.StringVar(&options.Network, "net", "tcp", "Network, for net.Dial")
 	flag.StringVar(&options.Address, "address", "", "Where to forward the connection")
 	flag.StringVar(&options.Hostname, "n", "", "Hostname in tailscale devices list")
@@ -21,6 +19,7 @@ func init() {
 	flag.StringVar(&options.Listen, "listen", "", "Port to listen")
 	flag.BoolVar(&options.EnableHTTP, "raw", false, "Disable HTTP handling")
 	flag.Parse()
+
 	options.EnableHTTP = !options.EnableHTTP
 	if options.Listen == "" && options.EnableHTTP {
 		if options.EnableFunnel || options.EnableTLS {
@@ -44,13 +43,6 @@ func init() {
 		"http", options.EnableHTTP,
 	)
 
-	if err != nil {
-		slog.Error("Fatal error", "err", err)
-		os.Exit(1)
-	}
-}
-
-func main() {
 	server, err := tsproxy.NewTailscaleProxyServer(options)
 	if err != nil {
 		panic(err)
