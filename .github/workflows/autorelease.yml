@@ -19,14 +19,9 @@ on:
         - patch
         - minor
         - major
-  schedule:
-  - cron: '0 2 * * 6'   # saturday 2am
+
 jobs:
   autorelease:
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
-      USERNAME: ${{ github.actor }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,107 +29,92 @@ jobs:
       attestations: write
       id-token: write
       pull-requests: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+      USERNAME: ${{ github.actor }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-    - name: Setup git config
-      run: |
-        git config user.name actions-bot
-        git config user.email actions-bot@users.noreply.github.com
+      - name: Setup git config
+        run: |
+          git config user.name actions-bot
+          git config user.email actions-bot@users.noreply.github.com
 
-    - uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3
+      - name: Install mise
+        uses: jdx/mise-action@v2
 
-    - name: Go get
-      run: go get ./...
+      - name: Install dependencies
+        run: mise run install
 
-    - name: Go fmt
-      run: go fmt ./...
+      - name: Codegen
+        run: mise run codegen
 
-    - name: Create Pull Request if there is new stuff from updaters
-      if: github.event_name != 'pull_request'
-      uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8
-      id: pr_create
-      with:
-        commit-message: Updater script changes
-        branch: updater-bot
-        delete-branch: true
-        title: "Updater: stuff changed"
-        body: |
-          Changes caused from update scripts
+      - name: Create Pull Request if codegen changed files
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/create-pull-request@v6
+        id: pr_create
+        with:
+          commit-message: "chore: update generated code"
+          branch: "chore/codegen-updates"
+          delete-branch: true
+          title: "chore: update generated code"
+          body: "Changes caused by codegen scripts."
 
-    - name: Stop if a pull request was created
-      if: github.event_name != 'pull_request'
-      env:
-        PR_NUMBER: ${{ steps.pr_create.outputs.pull-request-number }}
-      run: |
-        if [[ ! -z "$PR_NUMBER" ]]; then
-          echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
+      - name: Stop if a pull request was created
+        if: github.event_name != 'pull_request' && steps.pr_create.outputs.pull-request-number != ''
+        run: |
+          echo "Codegen changes detected and PR created. Stopping execution."
           exit 1
-        fi
 
-    - name: Build binaries
-      env:
-        TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-      run: |
-        echo "::group::Build container"
-        docker build -t "$TAG:latest" .
-        echo "::endgroup::"
+      - name: CI (Lint, Test, Build)
+        run: mise run ci
 
-        mkdir build -p && ls && pwd
-
-        echo "# Built targets" >> $GITHUB_STEP_SUMMARY
-        export CGO_ENABLED=0
-        go tool dist list | grep -vE 'wasm|aix|plan9|android|ios|illumos|solaris|dragonfly' | while IFS=/ read -r GOOS GOARCH; do
-          echo "::group::Build $GOOS/$GOARCH"
-          GOOS=$GOOS GOARCH=$GOARCH go build -v -o build/ts-proxyd-$GOOS-$GOARCH ./cmd/ts-proxyd && (echo "- $GOOS/$GOARCH" >> $GITHUB_STEP_SUMMARY) || true
-          echo "::endgroup::"
-        done
-
-    - name: Make release if everything looks right
-      if: github.event_name != 'pull_request'
-      env:
-        NEW_VERSION: ${{ github.event.inputs.new_version }}
-      run: |
-        if [[ ! -z "$NEW_VERSION" ]]; then
+      - name: Bump Version (Dispatch)
+        if: github.event_name == 'workflow_dispatch' && inputs.new_version != ''
+        env:
+          NEW_VERSION: ${{ inputs.new_version }}
+        run: |
           NO_TAG=1 ./make_release "$NEW_VERSION"
-          echo "New version: $(cat version.txt)" >> $GITHUB_STEP_SUMMARY
           echo "RELEASE_VERSION=$(cat version.txt)" >> $GITHUB_ENV
-        fi
 
-    - name: Create relase
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TAG: ${{ env.RELEASE_VERSION }}
-        TITLE: Release ${{ env.RELEASE_VERSION }}
-      run: |
-        gh release create "$TAG" \
-          --title "$TITLE" \
-          --generate-notes \
-          --notes-start-tag $(gh release list --limit 1 --json tagName -q .[].tagName) 
+      - name: Create Release
+        if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.RELEASE_VERSION }}
+          TITLE: Release ${{ env.RELEASE_VERSION }}
+        run: |
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --generate-notes \
+            --notes-start-tag $(gh release list --limit 1 --json tagName -q .[].tagName || echo "")
 
-    - name: Upload release artifacts
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TAG: ${{ env.RELEASE_VERSION }}
-      run: |
-        gh release upload "$TAG" build/* --clobber
+      - name: Upload Release Artifacts
+        if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.RELEASE_VERSION }}
+        run: |
+          gh release upload "$TAG" build/* --clobber
 
-    - name: Login to registry
-      uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ env.USERNAME }}
-        password: ${{ github.token }}
+      - name: Login to Container Registry
+        if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.USERNAME }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: "Build and publish container"
-      env:
-        TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
-      run: |
-        VERSION="$(cat version.txt)"
-        docker tag "$TAG:latest" "$TAG:$VERSION"
-        docker push "$TAG:$VERSION"
-        docker push "$TAG:latest"
+      - name: Build and Push Docker Image
+        if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
+        env:
+          TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          VERSION: ${{ env.RELEASE_VERSION }}
+        run: |
+          docker build -t "$TAG:latest" .
+          docker tag "$TAG:latest" "$TAG:$VERSION"
+          docker push "$TAG:$VERSION"
+          docker push "$TAG:latest"
