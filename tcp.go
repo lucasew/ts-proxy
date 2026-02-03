@@ -21,7 +21,7 @@ func (tps *TailscaleTCPProxyServer) Serve(ln net.Listener) error {
 	for {
 		select {
 		case <-tps.server.ctx.Done():
-			break
+			return nil
 		default:
 			conn, err := ln.Accept()
 			if err != nil {
@@ -38,7 +38,8 @@ var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// TODO maybe different buffer size?
 		// benchmark pls
-		return make([]byte, 1<<15)
+		b := make([]byte, 1<<15)
+		return &b
 	},
 }
 
@@ -48,7 +49,7 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 		c2, err = server.Dial("whatever", "whatever")
 		if err != nil {
 			slog.Error("tcp error", "err", err)
-			c1.Close()
+			_ = c1.Close()
 			slog.Info("disconnected", "remote_addr", c1.RemoteAddr())
 			return
 		}
@@ -56,8 +57,9 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 	}
 	first := make(chan<- struct{}, 1)
 	cp := func(dst net.Conn, src net.Conn) {
-		buf := bufferPool.Get().([]byte)
-		defer bufferPool.Put(buf)
+		bufPtr := bufferPool.Get().(*[]byte)
+		defer bufferPool.Put(bufPtr)
+		buf := *bufPtr
 		// TODO use splice on linux
 		// TODO needs some timeout to prevent torshammer ddos
 		_, err := io.CopyBuffer(dst, src, buf)
@@ -66,8 +68,8 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 			if err != nil {
 				slog.Error("tcp error", "err", err)
 			}
-			dst.Close()
-			src.Close()
+			_ = dst.Close()
+			_ = src.Close()
 			slog.Info("disconnected", "remote_addr", c1.RemoteAddr())
 		default:
 		}

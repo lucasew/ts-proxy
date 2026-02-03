@@ -1,2 +1,27 @@
 [tools]
 go = "1.25.6"
+golangci-lint = "latest"
+shellcheck = "latest"
+actionlint = "latest"
+
+[tasks]
+"lint:go" = "golangci-lint run"
+"lint:shell" = "shellcheck make_release"
+"lint:github" = "actionlint"
+lint = { depends = ["lint:*"] }
+
+"fmt:go" = "go fmt ./..."
+fmt = { depends = ["fmt:*"] }
+
+test = "go test -count=1 ./..."
+
+install = "go mod download"
+
+codegen = "true"
+
+ci = { depends = ["lint", "test", "build"] }
+
+build = "go build -o build/ts-proxyd ./cmd/ts-proxyd"
+
+"docker:build" = "docker build -t ts-proxy ."
+"docker:push" = "echo 'Please use CI for docker push'"
