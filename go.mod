@@ -1,6 +1,6 @@
 module github.com/lucasew/ts-proxy
 
-go 1.25.6
+go 1.25.5
 
 require tailscale.com v1.94.1
 

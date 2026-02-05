@@ -5,10 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
-	"time"
 )
-
-var tcpIdleTimeout = 60 * time.Second
 
 type TailscaleTCPProxyServer struct {
 	server *TailscaleProxyServer
@@ -57,17 +54,12 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 		}
 
 	}
-
-	if tcpIdleTimeout > 0 {
-		c1 = &idleTimeoutConn{Conn: c1, timeout: tcpIdleTimeout}
-		c2 = &idleTimeoutConn{Conn: c2, timeout: tcpIdleTimeout}
-	}
-
 	first := make(chan<- struct{}, 1)
 	cp := func(dst net.Conn, src net.Conn) {
 		buf := bufferPool.Get().([]byte)
 		defer bufferPool.Put(buf)
 		// TODO use splice on linux
+		// TODO needs some timeout to prevent torshammer ddos
 		_, err := io.CopyBuffer(dst, src, buf)
 		select {
 		case first <- struct{}{}:
@@ -82,23 +74,4 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 	}
 	go cp(c1, c2)
 	cp(c2, c1)
-}
-
-type idleTimeoutConn struct {
-	net.Conn
-	timeout time.Duration
-}
-
-func (c *idleTimeoutConn) Read(b []byte) (int, error) {
-	if err := c.Conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, err
-	}
-	return c.Conn.Read(b)
-}
-
-func (c *idleTimeoutConn) Write(b []byte) (int, error) {
-	if err := c.Conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, err
-	}
-	return c.Conn.Write(b)
 }
