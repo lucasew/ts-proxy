@@ -1,2 +1,5 @@
 [tools]
 go = "1.25.6"
+
+[tasks]
+ci = { run = "go test -v ./...", description = "Run CI tasks" }

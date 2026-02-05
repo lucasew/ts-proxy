@@ -2,6 +2,7 @@ package tsproxy
 
 import (
 	"io"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -9,6 +10,12 @@ import (
 
 // TestTCPProxyIdleTimeout verifies that idle connections are closed.
 func TestTCPProxyIdleTimeout(t *testing.T) {
+	// Silence logger for this test to avoid confusing CI with "ERROR" logs
+	// that are actually expected behavior (timeouts).
+	originalLogger := slog.Default()
+	defer slog.SetDefault(originalLogger)
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+
 	// Set a short timeout for testing
 	origTimeout := tcpIdleTimeout
 	tcpIdleTimeout = 200 * time.Millisecond
