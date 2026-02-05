@@ -1,2 +1,8 @@
 [tools]
 go = "1.25.6"
+
+[tasks]
+build = { run = "go build -v ./...", description = "Build the project" }
+test = { run = "go test -v ./...", description = "Run tests" }
+fmt = { run = "go fmt ./...", description = "Format code" }
+ci = { depends = ["build", "test"], description = "Run CI pipeline" }
