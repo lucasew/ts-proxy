@@ -16,12 +16,3 @@
 **Solution:** I moved the flag parsing, validation, and the `options` variable into the `main` function. This eliminates global state and makes the execution flow linear and explicit. I also removed the unreachable error check.
 
 **Pattern:** Avoid using `init` functions for application configuration or flag parsing. Instead, explicitly handle initialization in `main` or a dedicated configuration function to improve testability and readability. Dead code should be aggressively removed to prevent confusion.
-
-## 2026-02-04 - Fix Context Leak in NewTailscaleProxyServer
-**Issue:** `go vet` reported a possible context leak in `NewTailscaleProxyServer` because the `cancel` function returned by `context.WithCancel` was not called on error paths.
-
-**Root Cause:** The `cancel` function was created early in the function but not invoked when returning errors for validation failures (e.g., missing address) or directory creation errors.
-
-**Solution:** I added explicit `cancel()` calls before returning `nil, err` in all error branches of the `NewTailscaleProxyServer` function.
-
-**Pattern:** When using `context.WithCancel` (or `WithTimeout`/`WithDeadline`), ensure the returned `cancel` function is called on all code paths, including early error returns, to prevent resource leaks.
