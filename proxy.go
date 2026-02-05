@@ -61,11 +61,13 @@ func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscalePro
 	}
 	s.Hostname = options.Hostname
 	if options.Address == "" {
+		cancel()
 		return nil, ErrInvalidUpstream
 	}
 	if options.StateDir != "" {
 		err := os.MkdirAll(options.StateDir, 0700)
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 		s.Dir = options.StateDir
