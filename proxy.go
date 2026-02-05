@@ -50,24 +50,27 @@ type TailscaleProxyServerOptions struct {
 	Listen string
 }
 
-func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscaleProxyServer, error) {
+func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (_ *TailscaleProxyServer, err error) {
 	if options.Context == nil {
 		options.Context = context.Background()
 	}
 	ctx, cancel := context.WithCancel(options.Context)
+	defer func() {
+		if err != nil {
+			cancel()
+		}
+	}()
 	s := new(tsnet.Server)
 	if options.Hostname == "" {
 		options.Hostname = "tsproxy"
 	}
 	s.Hostname = options.Hostname
 	if options.Address == "" {
-		cancel()
 		return nil, ErrInvalidUpstream
 	}
 	if options.StateDir != "" {
 		err := os.MkdirAll(options.StateDir, 0700)
 		if err != nil {
-			cancel()
 			return nil, err
 		}
 		s.Dir = options.StateDir
