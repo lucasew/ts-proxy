@@ -50,11 +50,16 @@ type TailscaleProxyServerOptions struct {
 	Listen string
 }
 
-func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (*TailscaleProxyServer, error) {
+func NewTailscaleProxyServer(options TailscaleProxyServerOptions) (_ *TailscaleProxyServer, err error) {
 	if options.Context == nil {
 		options.Context = context.Background()
 	}
 	ctx, cancel := context.WithCancel(options.Context)
+	defer func() {
+		if err != nil {
+			cancel()
+		}
+	}()
 	s := new(tsnet.Server)
 	if options.Hostname == "" {
 		options.Hostname = "tsproxy"
