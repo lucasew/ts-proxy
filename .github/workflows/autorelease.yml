@@ -67,8 +67,8 @@ jobs:
       env:
         PR_NUMBER: ${{ steps.pr_create.outputs.pull-request-number }}
       run: |
-        if [[ -n "$PR_NUMBER" ]]; then
-          echo "The update scripts changed something and a PR was created. Giving up deploy." >> "$GITHUB_STEP_SUMMARY"
+        if [[ ! -z "$PR_NUMBER" ]]; then
+          echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
           exit 1
         fi
 
@@ -80,13 +80,13 @@ jobs:
         docker build -t "$TAG:latest" .
         echo "::endgroup::"
 
-        mkdir -p build
+        mkdir build -p && ls && pwd
 
-        echo "# Built targets" >> "$GITHUB_STEP_SUMMARY"
+        echo "# Built targets" >> $GITHUB_STEP_SUMMARY
         export CGO_ENABLED=0
         go tool dist list | grep -vE 'wasm|aix|plan9|android|ios|illumos|solaris|dragonfly' | while IFS=/ read -r GOOS GOARCH; do
           echo "::group::Build $GOOS/$GOARCH"
-          env GOOS="$GOOS" GOARCH="$GOARCH" go build -v -o "build/ts-proxyd-$GOOS-$GOARCH" ./cmd/ts-proxyd && (echo "- $GOOS/$GOARCH" >> "$GITHUB_STEP_SUMMARY") || true
+          GOOS=$GOOS GOARCH=$GOARCH go build -v -o build/ts-proxyd-$GOOS-$GOARCH ./cmd/ts-proxyd && (echo "- $GOOS/$GOARCH" >> $GITHUB_STEP_SUMMARY) || true
           echo "::endgroup::"
         done
 
@@ -95,10 +95,10 @@ jobs:
       env:
         NEW_VERSION: ${{ github.event.inputs.new_version }}
       run: |
-        if [[ -n "$NEW_VERSION" ]]; then
+        if [[ ! -z "$NEW_VERSION" ]]; then
           NO_TAG=1 ./make_release "$NEW_VERSION"
-          echo "New version: $(cat version.txt)" >> "$GITHUB_STEP_SUMMARY"
-          echo "RELEASE_VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
+          echo "New version: $(cat version.txt)" >> $GITHUB_STEP_SUMMARY
+          echo "RELEASE_VERSION=$(cat version.txt)" >> $GITHUB_ENV
         fi
 
     - name: Create relase
@@ -111,7 +111,7 @@ jobs:
         gh release create "$TAG" \
           --title "$TITLE" \
           --generate-notes \
-          --notes-start-tag "$(gh release list --limit 1 --json tagName -q .[].tagName)"
+          --notes-start-tag $(gh release list --limit 1 --json tagName -q .[].tagName)
 
     - name: Upload release artifacts
       if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
