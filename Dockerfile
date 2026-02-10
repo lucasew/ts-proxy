@@ -1,4 +1,4 @@
-FROM golang:1.25.6-alpine AS build-env
+FROM golang:1.25.7-alpine AS build-env
 
 WORKDIR /go/src/ts-proxy
 
@@ -23,4 +23,3 @@ RUN apk add --no-cache ca-certificates iptables iproute2 ip6tables
 COPY --from=build-env /go/src/ts-proxy/ts-proxyd /usr/local/bin
 
 ENTRYPOINT [ "/usr/local/bin/ts-proxyd" ]
-
