@@ -1,2 +1,35 @@
 [tools]
+"github:lucasew/workspaced" = "0.1.5"
 go = "1.25.7"
+goreleaser = "2.14.1"
+svu = "3.3.0"
+
+[tasks.lint]
+run = "workspaced codebase lint"
+
+[tasks.format]
+run = "workspaced codebase format"
+
+[tasks.build]
+run = "go build ./..."
+
+[tasks.test]
+run = "go test ./..."
+depends = ["build"]
+
+[tasks.ci]
+depends = ["lint", "build", "test"]
+
+[tasks.release]
+description = "Run a release"
+depends = ["ci"]
+usage = '''
+arg "<version>" help="New version" {
+  choices "next" "major" "minor" "patch"
+  default "next"
+}
+'''
+run = '''
+git tag $(svu ${usage_version})
+goreleaser release --clean
+'''

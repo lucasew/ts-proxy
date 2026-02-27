@@ -5,3 +5,5 @@ main
 result*
 ts-proxyd
 build
+# Added by goreleaser init:
+dist/
