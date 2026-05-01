@@ -1,7 +1,7 @@
 [tools]
 "github:lucasew/workspaced" = "0.2.1"
 go = "1.25.7"
-goreleaser = "2.14.1"
+goreleaser = "2.15.4"
 svu = "3.3.0"
 
 [tasks.lint]
