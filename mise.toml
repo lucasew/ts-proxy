@@ -1,24 +1,80 @@
 [tools]
+actionlint = "latest"
 "github:lucasew/workspaced" = "0.2.1"
 go = "1.25.7"
 goreleaser = "2.15.4"
 svu = "3.3.0"
 
 [tasks.lint]
+depends = ["lint:*"]
+
+[tasks."lint:workspaced"]
 run = "workspaced codebase lint"
 
-[tasks.format]
+[tasks.fmt]
+depends = ["fmt:*"]
+
+[tasks."fmt:workspaced"]
 run = "workspaced codebase format"
 
-[tasks.build]
-run = "go build ./..."
+[tasks.install]
+depends = ["install:*"]
+
+[tasks."install:go"]
+run = "go mod download"
+
+[tasks.codegen]
+depends = ["codegen:*"]
+
+[tasks."codegen:go"]
+run = "go generate ./..."
 
 [tasks.test]
-run = "go test ./..."
-depends = ["build"]
+depends = ["test:*"]
+
+[tasks."test:go"]
+run = "go test -count=1 ./..."
 
 [tasks.ci]
-depends = ["lint", "build", "test"]
+depends = ["lint", "test"]
+
+[tasks.build]
+depends = ["build:*"]
+
+[tasks."build:go"]
+run = "go build ./..."
+
+[tasks."build-all:go"]
+run = '''
+#!/usr/bin/env bash
+mkdir build -p
+export CGO_ENABLED=0
+go tool dist list | grep -vE 'wasm|aix|plan9|android|ios|illumos|solaris|dragonfly' | while IFS=/ read -r GOOS GOARCH; do
+  echo "::group::Build $GOOS/$GOARCH"
+  env GOOS="$GOOS" GOARCH="$GOARCH" go build -v -o "build/ts-proxyd-$GOOS-$GOARCH" ./cmd/ts-proxyd && (echo "- $GOOS/$GOARCH" >> "${GITHUB_STEP_SUMMARY:-/dev/null}") || true
+  echo "::endgroup::"
+done
+'''
+
+[tasks."docker:build"]
+run = '''
+#!/usr/bin/env bash
+TAG="${REGISTRY:-ghcr.io}/${IMAGE_NAME:-$(basename "$PWD")}"
+echo "::group::Build container"
+docker build -t "$TAG:latest" .
+echo "::endgroup::"
+'''
+
+[tasks."docker:push"]
+run = '''
+#!/usr/bin/env bash
+TAG="${REGISTRY:-ghcr.io}/${IMAGE_NAME:-$(basename "$PWD")}"
+VERSION="$(cat version.txt)"
+docker tag "$TAG:latest" "$TAG:$VERSION"
+docker push "$TAG:$VERSION"
+docker push "$TAG:latest"
+'''
+
 
 [tasks.release]
 description = "Run a release"
@@ -30,6 +86,6 @@ arg "<version>" help="New version" {
 }
 '''
 run = '''
-git tag $(svu ${usage_version})
+git tag "$(svu "${usage_version}")"
 goreleaser release --clean
 '''
