@@ -1,9 +1,9 @@
 # binary created with go build
-main
+/main
 
 # nix result link
 result*
-ts-proxyd
-build
+/ts-proxyd
+/build
 # Added by goreleaser init:
-dist/
+/dist/
