@@ -58,7 +58,7 @@ func (tps *TailscaleHTTPProxyServer) Serve(l net.Listener) error {
 func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := tps.server.WhoIs(r.Context(), r.RemoteAddr)
 	if err != nil {
-		slog.Error("error/http/ts-auth", "err", err)
+		ReportError(err, "error/http/ts-auth")
 		w.WriteHeader(500)
 		return
 	}
