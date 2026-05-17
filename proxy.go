@@ -3,7 +3,6 @@ package tsproxy
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net"
 
 	"os"
@@ -124,7 +123,7 @@ func (tps *TailscaleProxyServer) WhoIs(ctx context.Context, remoteAddr string) (
 
 func (tps *TailscaleProxyServer) handleError(err error) bool {
 	if err != nil {
-		slog.Error("FATAL ERROR", "err", err)
+		ReportError("FATAL ERROR", "err", err)
 		tps.cancel()
 	}
 	return err != nil
@@ -135,7 +134,7 @@ func (tps *TailscaleProxyServer) Run() {
 	if tps.handleError(err) {
 		return
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	server := NewTailscaleTCPProxyServer(tps)
 	if tps.options.EnableHTTP {
 		server, err = NewTailscaleHTTPProxyServer(tps)
@@ -143,5 +142,5 @@ func (tps *TailscaleProxyServer) Run() {
 			return
 		}
 	}
-	server.Serve(ln)
+	_ = server.Serve(ln)
 }
