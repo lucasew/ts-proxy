@@ -5,7 +5,29 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 )
+
+var TCPIdleTimeout = 60 * time.Second
+
+type timeoutConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *timeoutConn) Read(b []byte) (n int, err error) {
+	if err := c.Conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
+		return 0, err
+	}
+	return c.Conn.Read(b)
+}
+
+func (c *timeoutConn) Write(b []byte) (n int, err error) {
+	if err := c.Conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
+		return 0, err
+	}
+	return c.Conn.Write(b)
+}
 
 type TailscaleTCPProxyServer struct {
 	server *TailscaleProxyServer
@@ -38,7 +60,8 @@ var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// TODO maybe different buffer size?
 		// benchmark pls
-		return make([]byte, 1<<15)
+		b := make([]byte, 1<<15)
+		return &b
 	},
 }
 
@@ -56,11 +79,13 @@ func handleTCPConn(server *TailscaleProxyServer, c1 net.Conn, c2 net.Conn) {
 	}
 	first := make(chan<- struct{}, 1)
 	cp := func(dst net.Conn, src net.Conn) {
-		buf := bufferPool.Get().([]byte)
-		defer bufferPool.Put(buf)
+		bufPtr := bufferPool.Get().(*[]byte)
+		defer bufferPool.Put(bufPtr)
+		buf := *bufPtr
 		// TODO use splice on linux
-		// TODO needs some timeout to prevent torshammer ddos
-		_, err := io.CopyBuffer(dst, src, buf)
+		dstT := &timeoutConn{Conn: dst, timeout: TCPIdleTimeout}
+		srcT := &timeoutConn{Conn: src, timeout: TCPIdleTimeout}
+		_, err := io.CopyBuffer(dstT, srcT, buf)
 		select {
 		case first <- struct{}{}:
 			if err != nil {
