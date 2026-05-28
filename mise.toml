@@ -7,18 +7,35 @@ svu = "3.3.0"
 [tasks.lint]
 run = "workspaced codebase lint"
 
+[tasks.fmt]
+run = "workspaced codebase format"
+
 [tasks.format]
 run = "workspaced codebase format"
 
 [tasks.build]
 run = "go build ./..."
 
+[tasks."test:go"]
+run = "go test -count=1 ./..."
+
 [tasks.test]
-run = "go test ./..."
-depends = ["build"]
+depends = ["test:*"]
+
+[tasks.codegen]
+depends = ["codegen:*"]
+
+[tasks.install]
+depends = ["install:*"]
 
 [tasks.ci]
-depends = ["lint", "build", "test"]
+depends = ["lint", "test"]
+
+[tasks."docker:build"]
+run = "echo docker build"
+
+[tasks."docker:push"]
+run = "echo docker push"
 
 [tasks.release]
 description = "Run a release"
