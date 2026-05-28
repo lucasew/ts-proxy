@@ -29,7 +29,7 @@ depends = ["codegen:*"]
 depends = ["install:*"]
 
 [tasks.ci]
-depends = ["lint", "test"]
+depends = ["lint", "build", "test"]
 
 [tasks."docker:build"]
 run = "echo docker build"
