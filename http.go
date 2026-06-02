@@ -52,7 +52,15 @@ func (tps *TailscaleHTTPProxyServer) Serve(l net.Listener) error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	return server.Serve(l)
+	go func() {
+		<-tps.server.ctx.Done()
+		_ = server.Close()
+	}()
+	err := server.Serve(l)
+	if err == http.ErrServerClosed {
+		return nil
+	}
+	return err
 }
 
 func (tps *TailscaleHTTPProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {

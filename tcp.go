@@ -18,19 +18,23 @@ func NewTailscaleTCPProxyServer(server *TailscaleProxyServer) Server {
 }
 
 func (tps *TailscaleTCPProxyServer) Serve(ln net.Listener) error {
+	go func() {
+		<-tps.server.ctx.Done()
+		_ = ln.Close()
+	}()
 	for {
-		select {
-		case <-tps.server.ctx.Done():
-			break
-		default:
-			conn, err := ln.Accept()
-			if err != nil {
+		conn, err := ln.Accept()
+		if err != nil {
+			select {
+			case <-tps.server.ctx.Done():
+				return nil
+			default:
 				slog.Error("error/accept", "err", err)
 				continue
 			}
-			slog.Info("got tcp conn")
-			go handleTCPConn(tps.server, conn, nil)
 		}
+		slog.Info("got tcp conn")
+		go handleTCPConn(tps.server, conn, nil)
 	}
 }
 
