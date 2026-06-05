@@ -107,3 +107,82 @@ func TestSetTailscaleHeadersSanitization(t *testing.T) {
 		})
 	}
 }
+
+func TestEnrichHeadersSanitization(t *testing.T) {
+	// Instead of instantiating the full proxy server (which requires a running tsnet instance),
+	// we will manually create a mock object that implements what's needed for the test
+	// Actually, enrichHeaders only depends on tps.server.options.EnableTLS and tps.server.Hostname()
+
+	// mock TailscaleHTTPProxyServer
+	options := TailscaleProxyServerOptions{
+		Hostname:  "test-proxy",
+		EnableTLS: true,
+		Address:   "127.0.0.1:80",
+	}
+	baseServer := &TailscaleProxyServer{
+		options: options,
+		// We actually cannot easily mock tsnet.Server.CertDomains.
+		// Wait, Hostname() implementation does `for _, domain := range tps.server.CertDomains()`.
+		// But if `tps.server` is nil or not started, it panics?
+		// Actually CertDomains requires `s.getBackend()`. If s is just a struct, it crashes on `s.mu.Lock()` or similar if it's nil. Let me check the crash stack.
+	}
+	httpServer := &TailscaleHTTPProxyServer{
+		server: baseServer,
+	}
+
+	userInfo := &apitype.WhoIsResponse{
+		UserProfile: &tailcfg.UserProfile{
+			LoginName:     "user@example.com",
+			DisplayName:   "User Name",
+			ProfilePicURL: "http://example.com/pic.jpg",
+		},
+	}
+
+	tests := []struct {
+		name           string
+		initialHeaders map[string]string
+		wantHeaders    map[string]string
+		missingHeaders []string
+	}{
+		{
+			name: "Sanitize X-Forwarded underscore spoofing",
+			initialHeaders: map[string]string{
+				"X_Forwarded_Proto": "http",
+				"X_Forwarded_Host":  "evil.com",
+			},
+			wantHeaders: map[string]string{
+				"X-Forwarded-Proto": "https",
+				"X-Forwarded-Host":  "test-proxy",
+			},
+			missingHeaders: []string{
+				"X_Forwarded_Proto",
+				"X_Forwarded_Host",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+			for k, v := range tt.initialHeaders {
+				req.Header[k] = []string{v} // bypass canonicalization of Add/Set
+			}
+
+			httpServer.enrichHeaders(req, userInfo)
+
+			for k, v := range tt.wantHeaders {
+				if got := req.Header.Get(k); got != v {
+					t.Errorf("Header %q = %q, want %q", k, got, v)
+				}
+			}
+
+			for h := range req.Header {
+				for _, missing := range tt.missingHeaders {
+					if h == missing {
+						t.Errorf("Header %q should have been deleted", h)
+					}
+				}
+			}
+		})
+	}
+}

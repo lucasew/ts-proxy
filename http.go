@@ -87,13 +87,18 @@ func (tps *TailscaleHTTPProxyServer) handleRedirect(w http.ResponseWriter, r *ht
 }
 
 func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del(HeaderXForwardedProto)
+	for k := range r.Header {
+		normalized := strings.ReplaceAll(k, "_", "-")
+		if strings.EqualFold(normalized, HeaderXForwardedProto) ||
+			strings.EqualFold(normalized, HeaderXForwardedHost) {
+			delete(r.Header, k)
+		}
+	}
 	if tps.server.options.EnableTLS {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTPS)
 	} else {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTP)
 	}
-	r.Header.Del(HeaderXForwardedHost)
 	r.Header.Set(HeaderXForwardedHost, tps.server.Hostname())
 	slog.Info("request", "method", r.Method, "user", userInfo.UserProfile.LoginName, "host", r.Host, "url", r.URL.String())
 	setTailscaleHeaders(r, userInfo)
