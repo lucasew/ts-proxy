@@ -86,7 +86,7 @@ func (tps *TailscaleHTTPProxyServer) handleRedirect(w http.ResponseWriter, r *ht
 	return false
 }
 
-func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
+func sanitizeXForwardedHeaders(r *http.Request) {
 	for k := range r.Header {
 		normalized := strings.ReplaceAll(k, "_", "-")
 		if strings.EqualFold(normalized, HeaderXForwardedProto) ||
@@ -94,6 +94,10 @@ func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *ap
 			delete(r.Header, k)
 		}
 	}
+}
+
+func (tps *TailscaleHTTPProxyServer) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
+	sanitizeXForwardedHeaders(r)
 	if tps.server.options.EnableTLS {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTPS)
 	} else {

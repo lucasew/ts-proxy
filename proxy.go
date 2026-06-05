@@ -87,24 +87,11 @@ func (tps *TailscaleProxyServer) listenFunnel(network string, addr string) (net.
 	return tps.server.ListenFunnel(network, addr)
 }
 
-func (tps *TailscaleProxyServer) Hostname() (ret string) {
-	if tps.server == nil {
-		return tps.options.Hostname
-	}
-
-	ret = tps.options.Hostname
-
-	// Recover in case CertDomains panics (e.g. during testing when server isn't fully started)
-	defer func() {
-		if r := recover(); r != nil {
-			// fallback to options.Hostname
-		}
-	}()
-
+func (tps *TailscaleProxyServer) Hostname() string {
 	for _, domain := range tps.server.CertDomains() {
 		return domain
 	}
-	return ret
+	return tps.options.Hostname
 }
 
 func (tps *TailscaleProxyServer) GetListenerFunction() ListenerFunction {
