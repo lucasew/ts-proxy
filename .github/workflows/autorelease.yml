@@ -76,22 +76,19 @@ jobs:
       env:
         TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
       run: |
+        echo "::group::Build container"
+        docker build -t "$TAG:latest" .
+        echo "::endgroup::"
+
         mkdir build -p && ls && pwd
 
         echo "# Built targets" >> $GITHUB_STEP_SUMMARY
         export CGO_ENABLED=0
         go tool dist list | grep -vE 'wasm|aix|plan9|android|ios|illumos|solaris|dragonfly' | while IFS=/ read -r GOOS GOARCH; do
           echo "::group::Build $GOOS/$GOARCH"
-          EXT=""
-          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
-          mkdir -p "$GOOS/$GOARCH"
-          env GOOS="$GOOS" GOARCH="$GOARCH" go build -v -o "$GOOS/$GOARCH/ts-proxyd$EXT" ./cmd/ts-proxyd && cp "$GOOS/$GOARCH/ts-proxyd$EXT" "build/ts-proxyd-$GOOS-$GOARCH$EXT" && (echo "- $GOOS/$GOARCH" >> $GITHUB_STEP_SUMMARY) || true
+          GOOS=$GOOS GOARCH=$GOARCH go build -v -o build/ts-proxyd-$GOOS-$GOARCH ./cmd/ts-proxyd && (echo "- $GOOS/$GOARCH" >> $GITHUB_STEP_SUMMARY) || true
           echo "::endgroup::"
         done
-
-        echo "::group::Build container"
-        docker build -t "$TAG:latest" .
-        echo "::endgroup::"
 
     - name: Make release if everything looks right
       if: github.event_name != 'pull_request'
