@@ -7,18 +7,45 @@ svu = "3.3.0"
 [tasks.lint]
 run = "workspaced codebase lint"
 
+[tasks.fmt]
+run = "workspaced codebase format"
+
 [tasks.format]
 run = "workspaced codebase format"
 
-[tasks.build]
+[tasks."build:go"]
 run = "go build ./..."
 
+[tasks.build]
+depends = ["build:*"]
+
+[tasks."test:go"]
+run = "go test -count=1 ./..."
+depends = ["build:*"]
+
 [tasks.test]
-run = "go test ./..."
-depends = ["build"]
+depends = ["test:*"]
 
 [tasks.ci]
-depends = ["lint", "build", "test"]
+depends = ["lint", "test"]
+
+[tasks."codegen:go"]
+run = "go generate ./..."
+
+[tasks.codegen]
+depends = ["codegen:*"]
+
+[tasks."install:go"]
+run = "go mod download"
+
+[tasks.install]
+depends = ["install:*"]
+
+[tasks."docker:build"]
+run = "docker build -t ts-proxy:latest ."
+
+[tasks."docker:push"]
+run = "docker push ts-proxy:latest"
 
 [tasks.release]
 description = "Run a release"
