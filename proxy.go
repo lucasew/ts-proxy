@@ -143,5 +143,6 @@ func (tps *TailscaleProxyServer) Run() {
 			return
 		}
 	}
-	_ = server.Serve(ln)
+	err = server.Serve(ln)
+	tps.handleError(err)
 }
