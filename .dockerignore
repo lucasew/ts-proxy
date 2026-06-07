@@ -1,3 +1,2 @@
-*
-!Dockerfile
-!linux/
+Dockerfile
+*.nix
