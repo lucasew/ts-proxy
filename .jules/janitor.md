@@ -16,3 +16,4 @@
 **Solution:** I moved the flag parsing, validation, and the `options` variable into the `main` function. This eliminates global state and makes the execution flow linear and explicit. I also removed the unreachable error check.
 
 **Pattern:** Avoid using `init` functions for application configuration or flag parsing. Instead, explicitly handle initialization in `main` or a dedicated configuration function to improve testability and readability. Dead code should be aggressively removed to prevent confusion.
+- 2026-06-07: When cleaning up resources via defer or explicit Close(), unhandled errors should be explicitly ignored using an anonymous function or the blank identifier to satisfy linter checks, and sync.Pool should use pointers for slices to prevent interface boxing allocations.
