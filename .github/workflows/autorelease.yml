@@ -73,56 +73,7 @@ jobs:
         fi
 
     - name: Build binaries
-      env:
-        TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-      run: |
-        mkdir build -p && ls && pwd
-
-        echo "# Built targets" >> $GITHUB_STEP_SUMMARY
-        export CGO_ENABLED=0
-        go tool dist list | grep -vE 'wasm|aix|plan9|android|ios|illumos|solaris|dragonfly' | while IFS=/ read -r GOOS GOARCH; do
-          echo "::group::Build $GOOS/$GOARCH"
-          EXT=""
-          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
-          mkdir -p "$GOOS/$GOARCH"
-          env GOOS="$GOOS" GOARCH="$GOARCH" go build -v -o "$GOOS/$GOARCH/ts-proxyd$EXT" ./cmd/ts-proxyd && cp "$GOOS/$GOARCH/ts-proxyd$EXT" "build/ts-proxyd-$GOOS-$GOARCH$EXT" && (echo "- $GOOS/$GOARCH" >> $GITHUB_STEP_SUMMARY) || true
-          echo "::endgroup::"
-        done
-
-        echo "::group::Build container"
-        docker build -t "$TAG:latest" .
-        echo "::endgroup::"
-
-    - name: Make release if everything looks right
-      if: github.event_name != 'pull_request'
-      env:
-        NEW_VERSION: ${{ github.event.inputs.new_version }}
-      run: |
-        if [[ ! -z "$NEW_VERSION" ]]; then
-          NO_TAG=1 ./make_release "$NEW_VERSION"
-          echo "New version: $(cat version.txt)" >> $GITHUB_STEP_SUMMARY
-          echo "RELEASE_VERSION=$(cat version.txt)" >> $GITHUB_ENV
-        fi
-
-    - name: Create relase
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TAG: ${{ env.RELEASE_VERSION }}
-        TITLE: Release ${{ env.RELEASE_VERSION }}
-      run: |
-        gh release create "$TAG" \
-          --title "$TITLE" \
-          --generate-notes \
-          --notes-start-tag $(gh release list --limit 1 --json tagName -q .[].tagName) 
-
-    - name: Upload release artifacts
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TAG: ${{ env.RELEASE_VERSION }}
-      run: |
-        gh release upload "$TAG" build/* --clobber
+      run: mise ci
 
     - name: Login to registry
       uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -132,12 +83,9 @@ jobs:
         username: ${{ env.USERNAME }}
         password: ${{ github.token }}
 
-    - name: "Build and publish container"
-      env:
-        TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+    - name: Release
       if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
-      run: |
-        VERSION="$(cat version.txt)"
-        docker tag "$TAG:latest" "$TAG:$VERSION"
-        docker push "$TAG:$VERSION"
-        docker push "$TAG:latest"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NEW_VERSION: ${{ github.event.inputs.new_version }}
+      run: "mise release $NEW_VERSION"
