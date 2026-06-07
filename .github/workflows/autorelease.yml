@@ -77,14 +77,14 @@ jobs:
 
     - name: Login to registry
       uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
+      if: github.event.inputs.new_version != '' && github.event_name != 'pull_request'
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ env.USERNAME }}
         password: ${{ github.token }}
 
     - name: Release
-      if: env.RELEASE_VERSION != '' && github.event_name != 'pull_request'
+      if: github.event.inputs.new_version != '' && github.event_name != 'pull_request'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         NEW_VERSION: ${{ github.event.inputs.new_version }}
