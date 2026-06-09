@@ -1,4 +1,4 @@
-package tsproxy
+package handler
 
 import (
 	"net/http"
@@ -10,7 +10,6 @@ import (
 )
 
 func TestSetTailscaleHeadersSanitization(t *testing.T) {
-	// Create a dummy user info
 	userInfo := &apitype.WhoIsResponse{
 		UserProfile: &tailcfg.UserProfile{
 			LoginName:     "user@example.com",
@@ -22,11 +21,11 @@ func TestSetTailscaleHeadersSanitization(t *testing.T) {
 	tests := []struct {
 		name           string
 		initialHeaders map[string]string
-		wantHeaders    map[string]string // Headers that must exist with specific value
-		missingHeaders []string          // Headers that must NOT exist (in any casing/format)
+		wantHeaders    map[string]string
+		missingHeaders []string
 	}{
 		{
-			name: "Sanitize underscore spoofing",
+			name: "sanitize underscore spoofing",
 			initialHeaders: map[string]string{
 				"Tailscale_User_Login": "attacker@example.com",
 			},
@@ -35,11 +34,10 @@ func TestSetTailscaleHeadersSanitization(t *testing.T) {
 			},
 			missingHeaders: []string{
 				"Tailscale_User_Login",
-				"Tailscale_user_login",
 			},
 		},
 		{
-			name: "Sanitize mixed case underscore spoofing",
+			name: "sanitize mixed case underscore spoofing",
 			initialHeaders: map[string]string{
 				"TAILSCALE_USER_LOGIN": "attacker@example.com",
 			},
@@ -51,17 +49,17 @@ func TestSetTailscaleHeadersSanitization(t *testing.T) {
 			},
 		},
 		{
-			name: "Sanitize case insensitive dash spoofing",
+			name: "sanitize case insensitive dash spoofing",
 			initialHeaders: map[string]string{
 				"tailscale-user-login": "attacker@example.com",
 			},
 			wantHeaders: map[string]string{
 				"Tailscale-User-Login": "user@example.com",
 			},
-			missingHeaders: []string{}, // Go's Header.Del handles canonical forms, so this is just a sanity check
+			missingHeaders: []string{},
 		},
 		{
-			name: "Sanitize other headers",
+			name: "sanitize other headers",
 			initialHeaders: map[string]string{
 				"Tailscale_User_Name": "Attacker Name",
 			},
@@ -70,8 +68,18 @@ func TestSetTailscaleHeadersSanitization(t *testing.T) {
 			},
 			missingHeaders: []string{
 				"Tailscale_User_Name",
-				"Tailscale_user_name",
 			},
+		},
+		{
+			name: "all tailscale headers set correctly",
+			initialHeaders: map[string]string{},
+			wantHeaders: map[string]string{
+				"Tailscale-User-Login":       "user@example.com",
+				"Tailscale-User-Name":        "User Name",
+				"Tailscale-User-Profile-Pic": "http://example.com/pic.jpg",
+				"Tailscale-Headers-Info":     "https://tailscale.com/s/serve-headers",
+			},
+			missingHeaders: []string{},
 		},
 	}
 
@@ -82,26 +90,19 @@ func TestSetTailscaleHeadersSanitization(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 
-			setTailscaleHeaders(req, userInfo)
+			SetTailscaleHeaders(req, userInfo)
 
-			// Check wanted headers
 			for k, v := range tt.wantHeaders {
 				if got := req.Header.Get(k); got != v {
 					t.Errorf("Header %q = %q, want %q", k, got, v)
 				}
 			}
 
-			// Check missing headers
-			// We iterate through the actual headers map to catch non-canonical keys
 			for h := range req.Header {
 				for _, missing := range tt.missingHeaders {
-					// We can check exact match or normalized match.
-					// Since we want to ensure *specifically* the underscore versions are gone:
 					if h == missing {
 						t.Errorf("Header %q should have been deleted", h)
 					}
-					// Also check if the 'missing' target matches the header key in canonical form
-					// (though our main concern is the ones that bypass canonicalization)
 				}
 			}
 		})
