@@ -7,3 +7,5 @@ COPY $TARGETPLATFORM/ts-proxyd /usr/local/bin/ts-proxyd
 
 ENTRYPOINT [ "/usr/local/bin/ts-proxyd" ]
 
+CMD [ "server" ]
+
