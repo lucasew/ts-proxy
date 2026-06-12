@@ -2,7 +2,7 @@
 "github:lucasew/workspaced" = "0.2.1"
 go = "1.26.4"
 goreleaser = "2.16.0"
-svu = "3.3.0"
+svu = "3.4.1"
 
 [tasks.lint]
 run = "workspaced codebase lint"
