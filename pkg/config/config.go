@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -84,15 +85,26 @@ func (c *Config) SetDefaults() {
 	}
 }
 
-// ExpandEnv expands environment variable references in token auth keys.
-// It returns an error if any referenced variable (e.g. ${FOO} or $FOO) is not
-// present in the environment. This prevents silent empty auth keys when a
-// required secret variable is missing.
+// ExpandEnv expands environment variable references (using ${VAR} or $VAR syntax)
+// in all string fields of the configuration.
+//
+// Supported fields:
+//   - state_dir
+//   - tokens.<name>.auth_key
+//   - servers.<name>.hostname
+//   - servers.<name>.token
+//   - servers.<name>.handlers[].type
+//   - servers.<name>.handlers[].listen
+//   - servers.<name>.handlers[].upstream_address
+//   - servers.<name>.handlers[].upstream_network
+//
+// It collects errors for every field that references an undefined variable and
+// returns them joined with errors.Join (so all problems are reported at once).
 func (c *Config) ExpandEnv() error {
-	for name, token := range c.Tokens {
-		original := token.AuthKey
+	// Helper that expands a single value and reports missing vars with context.
+	expand := func(context string, original string) (string, error) {
 		if original == "" {
-			continue
+			return "", nil
 		}
 
 		missing := []string{}
@@ -112,13 +124,57 @@ func (c *Config) ExpandEnv() error {
 			return ""
 		})
 
-		token.AuthKey = expanded
-		c.Tokens[name] = token
-
 		if len(missing) > 0 {
-			return fmt.Errorf("token %q: auth_key references undefined environment variable(s): %s (original: %q)",
-				name, strings.Join(missing, ", "), original)
+			return expanded, fmt.Errorf("%s references undefined environment variable(s): %s (original: %q)",
+				context, strings.Join(missing, ", "), original)
 		}
+		return expanded, nil
+	}
+
+	var expandErrs []error
+	var err error
+
+	// Top level
+	c.StateDir, err = expand("state_dir", c.StateDir)
+	expandErrs = append(expandErrs, err)
+
+	// Tokens
+	for name, token := range c.Tokens {
+		token.AuthKey, err = expand(fmt.Sprintf("token %q auth_key", name), token.AuthKey)
+		c.Tokens[name] = token
+		expandErrs = append(expandErrs, err)
+	}
+
+	// Servers + handlers
+	for sname, srv := range c.Servers {
+		srv.Hostname, err = expand(fmt.Sprintf("server %q hostname", sname), srv.Hostname)
+		expandErrs = append(expandErrs, err)
+
+		srv.Token, err = expand(fmt.Sprintf("server %q token", sname), srv.Token)
+		expandErrs = append(expandErrs, err)
+
+		for i := range srv.Handlers {
+			h := &srv.Handlers[i]
+			prefix := fmt.Sprintf("server %q handler[%d]", sname, i)
+
+			h.Type, err = expand(prefix+" type", h.Type)
+			expandErrs = append(expandErrs, err)
+
+			h.Listen, err = expand(prefix+" listen", h.Listen)
+			expandErrs = append(expandErrs, err)
+
+			h.UpstreamAddress, err = expand(prefix+" upstream_address", h.UpstreamAddress)
+			expandErrs = append(expandErrs, err)
+
+			h.UpstreamNetwork, err = expand(prefix+" upstream_network", h.UpstreamNetwork)
+			expandErrs = append(expandErrs, err)
+		}
+
+		c.Servers[sname] = srv
+	}
+
+	if len(expandErrs) > 0 {
+		return errors.Join(expandErrs...)
 	}
 	return nil
 }
