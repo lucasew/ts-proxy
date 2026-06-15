@@ -15,7 +15,7 @@
 #   ts-proxyd config --config example-config.yaml
 # It prints the fully resolved configuration (after defaults and env expansion).
 
-state_dir: /var/lib/ts-proxy
+state_dir: "${STATE_DIR}"
 stop_on_fail: false   # If true, any server failure stops the whole process
 
 # Named Tailscale auth tokens. One token can be referenced by many servers (1:n).
