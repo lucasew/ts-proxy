@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
@@ -70,10 +72,11 @@ func (s *Supervisor) CloseAll() {
 
 // DisplayAuthenticated prints server info including FQDN (after authentication).
 func (s *Supervisor) DisplayAuthenticated() string {
-	var b []byte
+	var b strings.Builder
 	for _, srv := range s.servers {
 		scfg := s.cfg.Servers[srv.Name()]
-		b = fmt.Appendf(b, "%s (%s)\n", srv.Name(), srv.FQDN())
+		fmt.Fprintf(&b, "%s (%s)\n", srv.Name(), srv.FQDN())
+		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		for _, h := range scfg.Handlers {
 			flags := ""
 			if h.TLS {
@@ -85,11 +88,12 @@ func (s *Supervisor) DisplayAuthenticated() string {
 			if flags != "" {
 				flags = " [" + flags[1:] + "]"
 			}
-			b = fmt.Appendf(b, "  %s %s%s -> %s\n",
+			fmt.Fprintf(tw, "  %s\t%s%s\t->\t%s\n",
 				h.Listen, h.Type, flags, h.UpstreamAddress)
 		}
+		tw.Flush()
 	}
-	return string(b)
+	return b.String()
 }
 
 // Run starts all servers and supervises them.

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"text/tabwriter"
 )
 
 var slugPattern = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
@@ -241,6 +242,7 @@ func (c *Config) DisplayString() string {
 			fmt.Fprintf(&b, " [token: %s]", srv.Token)
 		}
 		b.WriteString("\n")
+		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		for _, h := range srv.Handlers {
 			var flags []string
 			if h.TLS {
@@ -253,9 +255,10 @@ func (c *Config) DisplayString() string {
 			if len(flags) > 0 {
 				flagStr = " [" + strings.Join(flags, ", ") + "]"
 			}
-			fmt.Fprintf(&b, "  %s %s%s -> %s\n",
+			fmt.Fprintf(tw, "  %s\t%s%s\t->\t%s\n",
 				h.Listen, strings.ToUpper(h.Type), flagStr, h.UpstreamAddress)
 		}
+		tw.Flush()
 	}
 	return b.String()
 }
