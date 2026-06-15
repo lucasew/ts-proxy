@@ -85,11 +85,42 @@ func (c *Config) SetDefaults() {
 }
 
 // ExpandEnv expands environment variable references in token auth keys.
-func (c *Config) ExpandEnv() {
+// It returns an error if any referenced variable (e.g. ${FOO} or $FOO) is not
+// present in the environment. This prevents silent empty auth keys when a
+// required secret variable is missing.
+func (c *Config) ExpandEnv() error {
 	for name, token := range c.Tokens {
-		token.AuthKey = os.ExpandEnv(token.AuthKey)
+		original := token.AuthKey
+		if original == "" {
+			continue
+		}
+
+		missing := []string{}
+		seen := map[string]bool{}
+
+		expanded := os.Expand(original, func(key string) string {
+			if seen[key] {
+				val, _ := os.LookupEnv(key)
+				return val
+			}
+			seen[key] = true
+
+			if val, ok := os.LookupEnv(key); ok {
+				return val
+			}
+			missing = append(missing, key)
+			return ""
+		})
+
+		token.AuthKey = expanded
 		c.Tokens[name] = token
+
+		if len(missing) > 0 {
+			return fmt.Errorf("token %q: auth_key references undefined environment variable(s): %s (original: %q)",
+				name, strings.Join(missing, ", "), original)
+		}
 	}
+	return nil
 }
 
 // Validate checks that the config is well-formed.

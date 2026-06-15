@@ -220,7 +220,9 @@ func TestExpandEnv(t *testing.T) {
 			"literal": {AuthKey: "tskey-literal"},
 		},
 	}
-	cfg.ExpandEnv()
+	if err := cfg.ExpandEnv(); err != nil {
+		t.Fatalf("ExpandEnv failed: %v", err)
+	}
 
 	if cfg.Tokens["default"].AuthKey != "tskey-test-value" {
 		t.Errorf("default auth_key = %q, want tskey-test-value", cfg.Tokens["default"].AuthKey)
@@ -276,7 +278,8 @@ func TestTCPHandlerNoListenDefault(t *testing.T) {
 	}
 }
 
-// Regression: ExpandEnv with unset env var returns empty string
+// ExpandEnv must error when a referenced variable is not set (prevents
+// silent empty auth keys in automated/container environments).
 func TestExpandEnvUnset(t *testing.T) {
 	os.Unsetenv("DEFINITELY_NOT_SET_12345")
 	cfg := Config{
@@ -284,10 +287,15 @@ func TestExpandEnvUnset(t *testing.T) {
 			"default": {AuthKey: "${DEFINITELY_NOT_SET_12345}"},
 		},
 	}
-	cfg.ExpandEnv()
-
-	if cfg.Tokens["default"].AuthKey != "" {
-		t.Errorf("unset env var should expand to empty string, got %q", cfg.Tokens["default"].AuthKey)
+	err := cfg.ExpandEnv()
+	if err == nil {
+		t.Fatal("expected error when auth_key references an unset environment variable")
+	}
+	if !strings.Contains(err.Error(), "DEFINITELY_NOT_SET_12345") {
+		t.Errorf("error should mention the missing variable name, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "token \"default\"") {
+		t.Errorf("error should mention the token name, got: %v", err)
 	}
 }
 

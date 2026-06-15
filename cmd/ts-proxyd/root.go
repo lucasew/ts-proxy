@@ -61,7 +61,9 @@ func loadConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 	cfg.SetDefaults()
-	cfg.ExpandEnv()
+	if err := cfg.ExpandEnv(); err != nil {
+		return nil, fmt.Errorf("expanding environment variables: %w", err)
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validating config: %w", err)
 	}
