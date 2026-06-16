@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"text/tabwriter"
 )
 
 var slugPattern = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
@@ -235,6 +234,32 @@ func (c *Config) ServerNames() []string {
 // DisplayString returns a human-readable representation of configured servers.
 func (c *Config) DisplayString() string {
 	var b strings.Builder
+
+	// Compute global max widths for handler columns so all sections align vertically
+	maxListen := 0
+	maxTypeFlags := 0
+	for _, name := range c.ServerNames() {
+		for _, h := range c.Servers[name].Handlers {
+			if len(h.Listen) > maxListen {
+				maxListen = len(h.Listen)
+			}
+			var flags []string
+			if h.TLS {
+				flags = append(flags, "TLS")
+			}
+			if h.Funnel {
+				flags = append(flags, "Funnel")
+			}
+			tf := strings.ToUpper(h.Type)
+			if len(flags) > 0 {
+				tf += " [" + strings.Join(flags, ", ") + "]"
+			}
+			if len(tf) > maxTypeFlags {
+				maxTypeFlags = len(tf)
+			}
+		}
+	}
+
 	for _, name := range c.ServerNames() {
 		srv := c.Servers[name]
 		fmt.Fprintf(&b, "%s (hostname: %s)", name, srv.Hostname)
@@ -242,7 +267,6 @@ func (c *Config) DisplayString() string {
 			fmt.Fprintf(&b, " [token: %s]", srv.Token)
 		}
 		b.WriteString("\n")
-		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		for _, h := range srv.Handlers {
 			var flags []string
 			if h.TLS {
@@ -255,10 +279,12 @@ func (c *Config) DisplayString() string {
 			if len(flags) > 0 {
 				flagStr = " [" + strings.Join(flags, ", ") + "]"
 			}
-			fmt.Fprintf(tw, "  %s\t%s%s\t->\t%s\n",
-				h.Listen, strings.ToUpper(h.Type), flagStr, h.UpstreamAddress)
+			typeFlags := strings.ToUpper(h.Type) + flagStr
+			fmt.Fprintf(&b, "  %-*s %-*s -> %s\n",
+				maxListen, h.Listen,
+				maxTypeFlags, typeFlags,
+				h.UpstreamAddress)
 		}
-		tw.Flush()
 	}
 	return b.String()
 }

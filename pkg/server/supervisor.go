@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"text/tabwriter"
 	"time"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
@@ -73,10 +72,36 @@ func (s *Supervisor) CloseAll() {
 // DisplayAuthenticated prints server info including FQDN (after authentication).
 func (s *Supervisor) DisplayAuthenticated() string {
 	var b strings.Builder
+
+	// Compute global max widths for handler columns (common vertical alignment across all servers)
+	maxListen := 0
+	maxTypeFlags := 0
+	for _, srv := range s.servers {
+		scfg := s.cfg.Servers[srv.Name()]
+		for _, h := range scfg.Handlers {
+			if len(h.Listen) > maxListen {
+				maxListen = len(h.Listen)
+			}
+			flags := ""
+			if h.TLS {
+				flags += " TLS"
+			}
+			if h.Funnel {
+				flags += " Funnel"
+			}
+			if flags != "" {
+				flags = " [" + flags[1:] + "]"
+			}
+			tf := h.Type + flags
+			if len(tf) > maxTypeFlags {
+				maxTypeFlags = len(tf)
+			}
+		}
+	}
+
 	for _, srv := range s.servers {
 		scfg := s.cfg.Servers[srv.Name()]
 		fmt.Fprintf(&b, "%s (%s)\n", srv.Name(), srv.FQDN())
-		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		for _, h := range scfg.Handlers {
 			flags := ""
 			if h.TLS {
@@ -88,10 +113,12 @@ func (s *Supervisor) DisplayAuthenticated() string {
 			if flags != "" {
 				flags = " [" + flags[1:] + "]"
 			}
-			fmt.Fprintf(tw, "  %s\t%s%s\t->\t%s\n",
-				h.Listen, h.Type, flags, h.UpstreamAddress)
+			typeFlags := h.Type + flags
+			fmt.Fprintf(&b, "  %-*s %-*s -> %s\n",
+				maxListen, h.Listen,
+				maxTypeFlags, typeFlags,
+				h.UpstreamAddress)
 		}
-		tw.Flush()
 	}
 	return b.String()
 }
