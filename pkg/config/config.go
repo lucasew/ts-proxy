@@ -243,16 +243,16 @@ func (c *Config) DisplayString() string {
 			if len(h.Listen) > maxListen {
 				maxListen = len(h.Listen)
 			}
-			var flags []string
+			var flagParts []string
 			if h.TLS {
-				flags = append(flags, "TLS")
+				flagParts = append(flagParts, "TLS")
 			}
 			if h.Funnel {
-				flags = append(flags, "Funnel")
+				flagParts = append(flagParts, "Funnel")
 			}
 			tf := strings.ToUpper(h.Type)
-			if len(flags) > 0 {
-				tf += " [" + strings.Join(flags, ", ") + "]"
+			if len(flagParts) > 0 {
+				tf += "+" + strings.Join(flagParts, "+")
 			}
 			if len(tf) > maxTypeFlags {
 				maxTypeFlags = len(tf)
@@ -268,18 +268,17 @@ func (c *Config) DisplayString() string {
 		}
 		b.WriteString("\n")
 		for _, h := range srv.Handlers {
-			var flags []string
+			var flagParts []string
 			if h.TLS {
-				flags = append(flags, "TLS")
+				flagParts = append(flagParts, "TLS")
 			}
 			if h.Funnel {
-				flags = append(flags, "Funnel")
+				flagParts = append(flagParts, "Funnel")
 			}
-			flagStr := ""
-			if len(flags) > 0 {
-				flagStr = " [" + strings.Join(flags, ", ") + "]"
+			typeFlags := strings.ToUpper(h.Type)
+			if len(flagParts) > 0 {
+				typeFlags += "+" + strings.Join(flagParts, "+")
 			}
-			typeFlags := strings.ToUpper(h.Type) + flagStr
 			fmt.Fprintf(&b, "  %-*s %-*s -> %s\n",
 				maxListen, h.Listen,
 				maxTypeFlags, typeFlags,

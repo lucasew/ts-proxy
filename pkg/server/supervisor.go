@@ -82,17 +82,17 @@ func (s *Supervisor) DisplayAuthenticated() string {
 			if len(h.Listen) > maxListen {
 				maxListen = len(h.Listen)
 			}
-			flags := ""
+			var flagParts []string
 			if h.TLS {
-				flags += " TLS"
+				flagParts = append(flagParts, "TLS")
 			}
 			if h.Funnel {
-				flags += " Funnel"
+				flagParts = append(flagParts, "Funnel")
 			}
-			if flags != "" {
-				flags = " [" + flags[1:] + "]"
+			tf := strings.ToUpper(h.Type)
+			if len(flagParts) > 0 {
+				tf += "+" + strings.Join(flagParts, "+")
 			}
-			tf := h.Type + flags
 			if len(tf) > maxTypeFlags {
 				maxTypeFlags = len(tf)
 			}
@@ -103,17 +103,17 @@ func (s *Supervisor) DisplayAuthenticated() string {
 		scfg := s.cfg.Servers[srv.Name()]
 		fmt.Fprintf(&b, "%s (%s)\n", srv.Name(), srv.FQDN())
 		for _, h := range scfg.Handlers {
-			flags := ""
+			var flagParts []string
 			if h.TLS {
-				flags += " TLS"
+				flagParts = append(flagParts, "TLS")
 			}
 			if h.Funnel {
-				flags += " Funnel"
+				flagParts = append(flagParts, "Funnel")
 			}
-			if flags != "" {
-				flags = " [" + flags[1:] + "]"
+			typeFlags := strings.ToUpper(h.Type)
+			if len(flagParts) > 0 {
+				typeFlags += "+" + strings.Join(flagParts, "+")
 			}
-			typeFlags := h.Type + flags
 			fmt.Fprintf(&b, "  %-*s %-*s -> %s\n",
 				maxListen, h.Listen,
 				maxTypeFlags, typeFlags,
