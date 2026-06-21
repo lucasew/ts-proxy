@@ -71,7 +71,7 @@ func TestSetTailscaleHeadersSanitization(t *testing.T) {
 			},
 		},
 		{
-			name: "all tailscale headers set correctly",
+			name:           "all tailscale headers set correctly",
 			initialHeaders: map[string]string{},
 			wantHeaders: map[string]string{
 				"Tailscale-User-Login":       "user@example.com",
