@@ -1,0 +1,66 @@
+# Example ts-proxy configuration (YAML).
+# This file can be loaded with:
+#   ts-proxyd server --config example-config.yaml
+#
+# Environment variables are expanded in auth_key values using ${VAR} syntax
+# (e.g. ${TS_AUTHKEY} or ${MY_SECRET_KEY}).
+#
+# You can also override top-level fields via flags or environment variables:
+#   --state-dir /path
+#   --stop-on-fail
+#   TS_PROXY_STATE_DIR=/path
+#   TS_PROXY_STOP_ON_FAIL=true
+#
+# The "config" subcommand is useful for debugging:
+#   ts-proxyd config --config example-config.yaml
+# It prints the fully resolved configuration (after defaults and env expansion).
+
+state_dir: "${STATE_DIR}"
+stop_on_fail: false   # If true, any server failure stops the whole process
+
+# Named Tailscale auth tokens. One token can be referenced by many servers (1:n).
+tokens:
+  production:
+    auth_key: "${TS_AUTHKEY}"   # Will be expanded from the environment at startup
+  staging:
+    auth_key: "${TS_AUTHKEY_STAGING}"
+
+# One or more independent Tailscale nodes ("servers").
+# Each gets its own tsnet instance, state directory (under state_dir/<name>),
+# and set of handlers.
+servers:
+  # Simple HTTP proxy on the Tailnet only (no TLS, no Funnel).
+  web:
+    hostname: my-web   # The name shown in the Tailscale admin console
+    token: production  # Which auth token to use (can be omitted for state-dir based login)
+    handlers:
+      - type: http
+        listen: ":80"
+        upstream_address: "127.0.0.1:8080"
+        # upstream_network defaults to "tcp"
+
+  # HTTPS + Tailscale Funnel (public internet exposure).
+  # Multiple handlers are allowed on the same server (different ports or protocols).
+  api:
+    hostname: my-api
+    token: production
+    handlers:
+      - type: http
+        listen: ":443"
+        upstream_address: "127.0.0.1:3000"
+        tls: true
+        funnel: true
+      - type: http
+        listen: ":80"
+        upstream_address: "127.0.0.1:3000"
+        # Non-TLS handler on the same server (will receive plain HTTP)
+
+  # Raw TCP forwarding example (e.g. for SSH, databases, game servers, etc.).
+  ssh:
+    hostname: my-ssh
+    token: staging
+    handlers:
+      - type: tcp
+        listen: ":22"
+        upstream_address: "127.0.0.1:22"
+        upstream_network: "tcp"   # "tcp" or "udp"

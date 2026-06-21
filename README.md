@@ -7,12 +7,14 @@ Unfortunately, the Tailscale daemon only allows exposing services using the
 current node domain, and you can't spawn (so far) nodes for services. With this
 you can!
 
-On first run for one service, you will have to authenticate the service using
-your Tailscale account. The authentication can be either done passing an
-authentication token through the `TS_AUTHKEY` environment or by reading the
-startup logs until you find the authentication link. After authentication,
-Tailscale will store the certificates and credentials to the location specified
-by the `-s` flag so subsequent runs will not require reauthentication and up-to-date authorization tokens.
+On first run, each configured server (Tailscale node) may need to be authenticated
+with your Tailscale account. You can supply an auth key via the environment (see
+`auth_key: "${TS_AUTHKEY}"` in the config file) or follow the login URL printed
+on first start.
+
+After the initial login, Tailscale stores certificates and node state under the
+`state_dir` configured in the YAML file (a subdirectory is created per server
+slug). Subsequent starts normally require no interaction.
 
 As the [main build of Tailscale](https://tailscale.com/s/serve-headers), you
 can get information about the user accessing the service using the following
@@ -39,18 +41,78 @@ they can change all the headers they want, including authentication ones.
 
 ## Usage
 
+The CLI uses subcommands (powered by Cobra + Viper).
+
+```bash
+# Show all commands and global flags
+ts-proxyd --help
+
+# Start the proxy (all servers defined in the config)
+ts-proxyd server --config /etc/ts-proxy/config.yaml
+
+# Dry-run: authenticate the Tailscale nodes and print the resolved
+# server structure, then exit without serving traffic.
+ts-proxyd server --dry-run --config config.yaml
+
+# Print the fully resolved configuration (very useful for debugging
+# env expansion, defaults, and validation errors).
+ts-proxyd config --config config.yaml
 ```
-Usage of ./ts-proxyd:
-  -addr string
-    	Port to listen (default ":443")
-  -f	Enable tailscale funnel
-  -h string
-    	Where to forward the connection
-  -n string
-    	Hostname in tailscale devices list
-  -s string
-    	State directory
+
+Global flags (available to all commands):
+
+- `--config` – path to the YAML config file. If omitted, ts-proxyd looks for
+  `ts-proxy.yaml` in the current directory, `$HOME/.config/ts-proxy/`, and
+  `/etc/ts-proxy/`.
+- `--state-dir` – base directory for Tailscale state (overwrites the value in the config file).
+- `--stop-on-fail` – if any server fails, stop the whole process (instead of restarting the failed one).
+
+See `ts-proxyd server --help` for the `--dry-run` flag.
+
+## Configuration
+
+Configuration is done via a YAML file (recommended), combined with a small number of
+command-line flags and environment variables (Traefik-style).
+
+See the well-commented [example-config.yaml](example-config.yaml) in the root of this repository for a complete example covering:
+
+- Multiple independent Tailscale nodes ("servers")
+- Named auth tokens (1 token can be used by many servers)
+- Both HTTP and raw TCP handlers
+- TLS termination + Tailscale Funnel on selected handlers
+- Environment variable expansion inside `auth_key` values (`${TS_AUTHKEY}` etc.)
+
+A minimal example:
+
+```yaml
+state_dir: /var/lib/ts-proxy
+stop_on_fail: false
+
+tokens:
+  prod:
+    auth_key: "${TS_AUTHKEY}"
+
+servers:
+  web:
+    hostname: my-service
+    token: prod
+    handlers:
+      - type: http
+        listen: ":80"
+        upstream_address: "127.0.0.1:8080"
+      - type: http
+        listen: ":443"
+        upstream_address: "127.0.0.1:8080"
+        tls: true
+        funnel: true   # expose publicly via Tailscale Funnel
 ```
+
+### Important notes about configuration
+- Server and token names must match `^[a-zA-Z0-9_]+$` (letters, numbers, underscore).
+- Each server gets its own subdirectory under `state_dir/<server-name>`.
+- `auth_key` values containing `${VAR}` are expanded at load time using the process environment.
+- The `config` subcommand shows you exactly what will be used after defaults are applied and variables expanded.
+- You can override `state_dir` and `stop_on_fail` from the command line or `TS_PROXY_*` environment variables.
 
 ## Release schedule
 Version structure example: 0.7.10
@@ -68,4 +130,8 @@ No plans for bumping the major versions yet.
 
 ## Next steps
 - [ ] A way to expose a folder, maybe using single page application patterns, instead of only ports.
-- [ ] Experiments around exposing many nodes using only one process and a TOML, or YAML, config file.
+- [x] Multi-server support via YAML configuration (and a single process) — implemented. See `example-config.yaml` and the `server` / `config` subcommands.
+
+## Related projects
+This project re-uses the same Tailscale `tsnet` + header primitives as
+[tclip](https://github.com/tailscale-dev/tclip).
