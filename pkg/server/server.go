@@ -60,12 +60,20 @@ func (s *Server) FQDN() string {
 	return s.opts.Hostname
 }
 
+// mustTransition records a lifecycle change; invalid transitions are logged and ignored
+// so callers keep working even if the state machine lags behind reality.
+func (s *Server) mustTransition(to State) {
+	if err := s.sm.Transition(to); err != nil {
+		slog.Warn("state transition rejected", "server", s.name, "to", to, "current", s.sm.Current(), "err", err)
+	}
+}
+
 // Start initializes the Tailscale node and authenticates.
 func (s *Server) Start(ctx context.Context) error {
-	s.sm.Transition(StateStarting)
+	s.mustTransition(StateStarting)
 
 	if err := os.MkdirAll(s.opts.StateDir, 0700); err != nil {
-		s.sm.Transition(StateFailed)
+		s.mustTransition(StateFailed)
 		return fmt.Errorf("create state dir %s: %w", s.opts.StateDir, err)
 	}
 
@@ -77,12 +85,12 @@ func (s *Server) Start(ctx context.Context) error {
 		s.ts.AuthKey = s.opts.AuthKey
 	}
 
-	s.sm.Transition(StateAuthenticating)
+	s.mustTransition(StateAuthenticating)
 	slog.Info("authenticating", "server", s.name)
 
 	_, err := s.ts.Up(ctx)
 	if err != nil {
-		s.sm.Transition(StateFailed)
+		s.mustTransition(StateFailed)
 		s.ts.Close()
 		s.ts = nil
 		return fmt.Errorf("tailscale up: %w", err)
@@ -100,7 +108,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	lc, err := s.ts.LocalClient()
 	if err != nil {
-		s.sm.Transition(StateFailed)
+		s.mustTransition(StateFailed)
 		return fmt.Errorf("local client: %w", err)
 	}
 
@@ -109,7 +117,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 
 	fqdn := s.FQDN()
-	s.sm.Transition(StateRunning)
+	s.mustTransition(StateRunning)
 
 	g, gCtx := errgroup.WithContext(ctx)
 	for _, hc := range s.opts.Handlers {
@@ -139,9 +147,9 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	err = g.Wait()
 	if err != nil {
-		s.sm.Transition(StateFailed)
+		s.mustTransition(StateFailed)
 	} else {
-		s.sm.Transition(StateStopped)
+		s.mustTransition(StateStopped)
 	}
 	return err
 }

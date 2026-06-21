@@ -132,51 +132,53 @@ func (c *Config) ExpandEnv() error {
 	}
 
 	var expandErrs []error
-	var err error
+	collect := func(err error) {
+		if err != nil {
+			expandErrs = append(expandErrs, err)
+		}
+	}
 
 	// Top level
+	var err error
 	c.StateDir, err = expand("state_dir", c.StateDir)
-	expandErrs = append(expandErrs, err)
+	collect(err)
 
 	// Tokens
 	for name, token := range c.Tokens {
 		token.AuthKey, err = expand(fmt.Sprintf("token %q auth_key", name), token.AuthKey)
 		c.Tokens[name] = token
-		expandErrs = append(expandErrs, err)
+		collect(err)
 	}
 
 	// Servers + handlers
 	for sname, srv := range c.Servers {
 		srv.Hostname, err = expand(fmt.Sprintf("server %q hostname", sname), srv.Hostname)
-		expandErrs = append(expandErrs, err)
+		collect(err)
 
 		srv.Token, err = expand(fmt.Sprintf("server %q token", sname), srv.Token)
-		expandErrs = append(expandErrs, err)
+		collect(err)
 
 		for i := range srv.Handlers {
 			h := &srv.Handlers[i]
 			prefix := fmt.Sprintf("server %q handler[%d]", sname, i)
 
 			h.Type, err = expand(prefix+" type", h.Type)
-			expandErrs = append(expandErrs, err)
+			collect(err)
 
 			h.Listen, err = expand(prefix+" listen", h.Listen)
-			expandErrs = append(expandErrs, err)
+			collect(err)
 
 			h.UpstreamAddress, err = expand(prefix+" upstream_address", h.UpstreamAddress)
-			expandErrs = append(expandErrs, err)
+			collect(err)
 
 			h.UpstreamNetwork, err = expand(prefix+" upstream_network", h.UpstreamNetwork)
-			expandErrs = append(expandErrs, err)
+			collect(err)
 		}
 
 		c.Servers[sname] = srv
 	}
 
-	if len(expandErrs) > 0 {
-		return errors.Join(expandErrs...)
-	}
-	return nil
+	return errors.Join(expandErrs...)
 }
 
 // Validate checks that the config is well-formed.
@@ -231,34 +233,54 @@ func (c *Config) ServerNames() []string {
 	return names
 }
 
+// HandlerTypeFlags returns a display label like "HTTP", "HTTP+TLS", or "TCP+Funnel".
+func HandlerTypeFlags(h HandlerConfig) string {
+	var flagParts []string
+	if h.TLS {
+		flagParts = append(flagParts, "TLS")
+	}
+	if h.Funnel {
+		flagParts = append(flagParts, "Funnel")
+	}
+	typeFlags := strings.ToUpper(h.Type)
+	if len(flagParts) > 0 {
+		typeFlags += "+" + strings.Join(flagParts, "+")
+	}
+	return typeFlags
+}
+
+// HandlerColumnWidths returns max widths for listen and type/flags columns
+// across the given handlers, for aligned multi-server display.
+func HandlerColumnWidths(handlers []HandlerConfig) (maxListen, maxTypeFlags int) {
+	for _, h := range handlers {
+		if len(h.Listen) > maxListen {
+			maxListen = len(h.Listen)
+		}
+		if n := len(HandlerTypeFlags(h)); n > maxTypeFlags {
+			maxTypeFlags = n
+		}
+	}
+	return maxListen, maxTypeFlags
+}
+
+// FormatHandlerLine returns one indented handler line for DisplayString-style output.
+func FormatHandlerLine(h HandlerConfig, maxListen, maxTypeFlags int) string {
+	return fmt.Sprintf("  %-*s %-*s -> %s\n",
+		maxListen, h.Listen,
+		maxTypeFlags, HandlerTypeFlags(h),
+		h.UpstreamAddress)
+}
+
 // DisplayString returns a human-readable representation of configured servers.
 func (c *Config) DisplayString() string {
 	var b strings.Builder
 
 	// Compute global max widths for handler columns so all sections align vertically
-	maxListen := 0
-	maxTypeFlags := 0
+	var all []HandlerConfig
 	for _, name := range c.ServerNames() {
-		for _, h := range c.Servers[name].Handlers {
-			if len(h.Listen) > maxListen {
-				maxListen = len(h.Listen)
-			}
-			var flagParts []string
-			if h.TLS {
-				flagParts = append(flagParts, "TLS")
-			}
-			if h.Funnel {
-				flagParts = append(flagParts, "Funnel")
-			}
-			tf := strings.ToUpper(h.Type)
-			if len(flagParts) > 0 {
-				tf += "+" + strings.Join(flagParts, "+")
-			}
-			if len(tf) > maxTypeFlags {
-				maxTypeFlags = len(tf)
-			}
-		}
+		all = append(all, c.Servers[name].Handlers...)
 	}
+	maxListen, maxTypeFlags := HandlerColumnWidths(all)
 
 	for _, name := range c.ServerNames() {
 		srv := c.Servers[name]
@@ -268,21 +290,7 @@ func (c *Config) DisplayString() string {
 		}
 		b.WriteString("\n")
 		for _, h := range srv.Handlers {
-			var flagParts []string
-			if h.TLS {
-				flagParts = append(flagParts, "TLS")
-			}
-			if h.Funnel {
-				flagParts = append(flagParts, "Funnel")
-			}
-			typeFlags := strings.ToUpper(h.Type)
-			if len(flagParts) > 0 {
-				typeFlags += "+" + strings.Join(flagParts, "+")
-			}
-			fmt.Fprintf(&b, "  %-*s %-*s -> %s\n",
-				maxListen, h.Listen,
-				maxTypeFlags, typeFlags,
-				h.UpstreamAddress)
+			b.WriteString(FormatHandlerLine(h, maxListen, maxTypeFlags))
 		}
 	}
 	return b.String()

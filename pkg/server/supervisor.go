@@ -73,51 +73,17 @@ func (s *Supervisor) CloseAll() {
 func (s *Supervisor) DisplayAuthenticated() string {
 	var b strings.Builder
 
-	// Compute global max widths for handler columns (common vertical alignment across all servers)
-	maxListen := 0
-	maxTypeFlags := 0
+	var all []config.HandlerConfig
 	for _, srv := range s.servers {
-		scfg := s.cfg.Servers[srv.Name()]
-		for _, h := range scfg.Handlers {
-			if len(h.Listen) > maxListen {
-				maxListen = len(h.Listen)
-			}
-			var flagParts []string
-			if h.TLS {
-				flagParts = append(flagParts, "TLS")
-			}
-			if h.Funnel {
-				flagParts = append(flagParts, "Funnel")
-			}
-			tf := strings.ToUpper(h.Type)
-			if len(flagParts) > 0 {
-				tf += "+" + strings.Join(flagParts, "+")
-			}
-			if len(tf) > maxTypeFlags {
-				maxTypeFlags = len(tf)
-			}
-		}
+		all = append(all, s.cfg.Servers[srv.Name()].Handlers...)
 	}
+	maxListen, maxTypeFlags := config.HandlerColumnWidths(all)
 
 	for _, srv := range s.servers {
 		scfg := s.cfg.Servers[srv.Name()]
 		fmt.Fprintf(&b, "%s (%s)\n", srv.Name(), srv.FQDN())
 		for _, h := range scfg.Handlers {
-			var flagParts []string
-			if h.TLS {
-				flagParts = append(flagParts, "TLS")
-			}
-			if h.Funnel {
-				flagParts = append(flagParts, "Funnel")
-			}
-			typeFlags := strings.ToUpper(h.Type)
-			if len(flagParts) > 0 {
-				typeFlags += "+" + strings.Join(flagParts, "+")
-			}
-			fmt.Fprintf(&b, "  %-*s %-*s -> %s\n",
-				maxListen, h.Listen,
-				maxTypeFlags, typeFlags,
-				h.UpstreamAddress)
+			b.WriteString(config.FormatHandlerLine(h, maxListen, maxTypeFlags))
 		}
 	}
 	return b.String()

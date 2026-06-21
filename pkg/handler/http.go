@@ -52,8 +52,9 @@ func NewHTTP(opts HTTPOptions) *HTTPHandler {
 	}
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.Transport = &http.Transport{
-		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-			return net.Dial(opts.UpstreamNetwork, opts.UpstreamAddress)
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, opts.UpstreamNetwork, opts.UpstreamAddress)
 		},
 	}
 	return &HTTPHandler{
@@ -75,7 +76,9 @@ func (h *HTTPHandler) Serve(ctx context.Context, ln net.Listener) error {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		srv.Shutdown(shutdownCtx)
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("http server shutdown", "err", err)
+		}
 	}()
 
 	err := srv.Serve(ln)
