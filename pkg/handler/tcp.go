@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 	"io"
 	"log/slog"
 	"net"
@@ -10,7 +11,7 @@ import (
 
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 1<<15)
+		buf := make([]byte, 1<<15); return &buf
 	},
 }
 
@@ -31,7 +32,7 @@ func NewTCP(upstreamNetwork, upstreamAddress string) *TCPHandler {
 func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 	go func() {
 		<-ctx.Done()
-		ln.Close()
+		func() { _ = ln.Close() }()
 	}()
 
 	for {
@@ -40,7 +41,7 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			slog.Error("tcp accept error", "err", err)
+			tsproxy.ReportError("tcp accept error", err)
 			continue
 		}
 		slog.Info("tcp connection", "remote", conn.RemoteAddr())
@@ -51,23 +52,23 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 func (h *TCPHandler) handleConn(downstream net.Conn) {
 	upstream, err := net.Dial(h.upstreamNetwork, h.upstreamAddress)
 	if err != nil {
-		slog.Error("tcp dial upstream", "err", err, "upstream", h.upstreamAddress)
-		downstream.Close()
+		tsproxy.ReportError("tcp dial upstream", err, "upstream", h.upstreamAddress)
+		func() { _ = downstream.Close() }()
 		return
 	}
 
 	first := make(chan struct{}, 1)
 	cp := func(dst, src net.Conn) {
-		buf := bufferPool.Get().([]byte)
+		buf := bufferPool.Get().(*[]byte)
 		defer bufferPool.Put(buf)
-		_, err := io.CopyBuffer(dst, src, buf)
+		_, err := io.CopyBuffer(dst, src, *buf)
 		select {
 		case first <- struct{}{}:
 			if err != nil {
-				slog.Error("tcp copy error", "err", err)
+				tsproxy.ReportError("tcp copy error", err)
 			}
-			dst.Close()
-			src.Close()
+			func() { _ = dst.Close() }()
+			func() { _ = src.Close() }()
 			slog.Info("tcp disconnected", "remote", downstream.RemoteAddr())
 		default:
 		}
