@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 )
 
 // Supervisor manages multiple servers and their lifecycles.
@@ -64,7 +65,7 @@ func (s *Supervisor) StartAll(ctx context.Context) error {
 func (s *Supervisor) CloseAll() {
 	for _, srv := range s.servers {
 		if err := srv.Close(); err != nil {
-			slog.Error("close error", "server", srv.Name(), "err", err)
+			tsproxy.ReportError("close error", err, "server", srv.Name())
 		}
 	}
 }
@@ -127,7 +128,7 @@ func (s *Supervisor) runWithRestart(ctx context.Context, srv *Server) error {
 			return nil
 		}
 		if err != nil {
-			slog.Error("server failed", "name", srv.Name(), "error", err)
+			tsproxy.ReportError("server failed", err, "name", srv.Name())
 			if s.cfg.StopOnFail {
 				return fmt.Errorf("server %s: %w", srv.Name(), err)
 			}
