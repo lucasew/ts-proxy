@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 )
 
 var bufferPool = sync.Pool{
@@ -40,7 +42,7 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			slog.Error("tcp accept error", "err", err)
+			tsproxy.ReportError("tcp accept error", err)
 			continue
 		}
 		slog.Info("tcp connection", "remote", conn.RemoteAddr())
@@ -51,7 +53,7 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 func (h *TCPHandler) handleConn(downstream net.Conn) {
 	upstream, err := net.Dial(h.upstreamNetwork, h.upstreamAddress)
 	if err != nil {
-		slog.Error("tcp dial upstream", "err", err, "upstream", h.upstreamAddress)
+		tsproxy.ReportError("tcp dial upstream", err, "upstream", h.upstreamAddress)
 		downstream.Close()
 		return
 	}
@@ -64,7 +66,7 @@ func (h *TCPHandler) handleConn(downstream net.Conn) {
 		select {
 		case first <- struct{}{}:
 			if err != nil {
-				slog.Error("tcp copy error", "err", err)
+				tsproxy.ReportError("tcp copy error", err)
 			}
 			dst.Close()
 			src.Close()

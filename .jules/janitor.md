@@ -17,3 +17,13 @@
 
 **Pattern:** Avoid using `init` functions for application configuration or flag parsing. Instead, explicitly handle initialization in `main` or a dedicated configuration function to improve testability and readability. Dead code should be aggressively removed to prevent confusion.
 - 2026-06-07: Ensure mise.toml task definitions use wildcard dependencies for grouped jobs, and explicitly ignore unhandled Close errors to satisfy linters.
+
+## 2026-06-29 - Implement Centralized Error Reporting Mechanism
+
+**Issue:** Error logging via `slog.Error` was scattered across the codebase (`cmd/ts-proxyd/root.go`, `pkg/handler/http.go`, `pkg/handler/tcp.go`, `pkg/server/supervisor.go`), violating the mandatory architecture requirement for a single, centralized error-reporting function.
+
+**Root Cause:** Direct logging with standard library mechanisms like `slog.Error` is a common default in early development, but it prevents systematic error handling, metric aggregation, or Sentry integration. The codebase had not yet implemented the required centralized layer.
+
+**Solution:** I created a new `tsproxy.ReportError` function in `pkg/tsproxy/error.go`. I then systematically replaced all instances of `slog.Error` across the handlers and servers with the new centralized function, passing context appropriately.
+
+**Pattern:** All code paths that handle unexpected errors MUST funnel through a single centralized error-reporting function (`tsproxy.ReportError`). Never call `slog.Error` directly at the call site for error conditions that need monitoring or aggregation.

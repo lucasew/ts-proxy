@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -47,7 +48,7 @@ func initConfig() {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			slog.Error("reading config file", "err", err)
+			tsproxy.ReportError("reading config file", err)
 			os.Exit(1)
 		}
 	} else {
