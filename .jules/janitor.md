@@ -17,3 +17,11 @@
 
 **Pattern:** Avoid using `init` functions for application configuration or flag parsing. Instead, explicitly handle initialization in `main` or a dedicated configuration function to improve testability and readability. Dead code should be aggressively removed to prevent confusion.
 - 2026-06-07: Ensure mise.toml task definitions use wildcard dependencies for grouped jobs, and explicitly ignore unhandled Close errors to satisfy linters.
+## 2026-07-02 - Optimize sync.Pool usage to reduce interface boxing allocations
+**Issue:** The `bufferPool` in `pkg/handler/tcp.go` was storing `[]byte` values directly.
+
+**Root Cause:** When `sync.Pool.Get` and `sync.Pool.Put` are used with a struct or slice (like `[]byte`), Go wraps them in an empty interface (`interface{}`), causing memory allocations (interface boxing) every time they are retrieved or stored.
+
+**Solution:** I changed the `bufferPool.New` function to return a pointer to the slice (`*[]byte`), and refactored the TCP handler's `cp` function to cast the retrieved item to `*[]byte` and dereference it. This avoids interface boxing allocations.
+
+**Pattern:** When using `sync.Pool` for byte slices or structs, always store pointers (e.g., `*[]byte`) instead of the actual values to avoid unnecessary allocations during interface boxing.
