@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 	"log/slog"
 	"net"
 	"net/http"
@@ -77,7 +78,7 @@ func (h *HTTPHandler) Serve(ctx context.Context, ln net.Listener) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			slog.Error("http server shutdown", "err", err)
+			tsproxy.ReportError(err, "context", "http server shutdown")
 		}
 	}()
 
@@ -92,7 +93,7 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.opts.WhoIs != nil {
 		userInfo, err := h.opts.WhoIs(r.Context(), r.RemoteAddr)
 		if err != nil {
-			slog.Error("http whois error", "err", err)
+			tsproxy.ReportError(err, "context", "http whois error")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
