@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 	"io"
 	"log/slog"
 	"net"
@@ -40,7 +41,7 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			slog.Error("tcp accept error", "err", err)
+			tsproxy.ReportError(err, "context", "tcp accept error")
 			continue
 		}
 		slog.Info("tcp connection", "remote", conn.RemoteAddr())
@@ -51,7 +52,7 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 func (h *TCPHandler) handleConn(downstream net.Conn) {
 	upstream, err := net.Dial(h.upstreamNetwork, h.upstreamAddress)
 	if err != nil {
-		slog.Error("tcp dial upstream", "err", err, "upstream", h.upstreamAddress)
+		tsproxy.ReportError(err, "context", "tcp dial upstream", "upstream", h.upstreamAddress)
 		downstream.Close()
 		return
 	}
@@ -64,7 +65,7 @@ func (h *TCPHandler) handleConn(downstream net.Conn) {
 		select {
 		case first <- struct{}{}:
 			if err != nil {
-				slog.Error("tcp copy error", "err", err)
+				tsproxy.ReportError(err, "context", "tcp copy error")
 			}
 			dst.Close()
 			src.Close()
