@@ -33,7 +33,9 @@ func NewTCP(upstreamNetwork, upstreamAddress string) *TCPHandler {
 func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 	go func() {
 		<-ctx.Done()
-		ln.Close()
+		if err := ln.Close(); err != nil {
+			tsproxy.ReportError(err, "context", "listener close error")
+		}
 	}()
 
 	for {
@@ -54,7 +56,9 @@ func (h *TCPHandler) handleConn(downstream net.Conn) {
 	upstream, err := net.Dial(h.upstreamNetwork, h.upstreamAddress)
 	if err != nil {
 		tsproxy.ReportError(err, "context", "tcp dial upstream", "upstream", h.upstreamAddress)
-		downstream.Close()
+		if cerr := downstream.Close(); cerr != nil {
+			tsproxy.ReportError(cerr, "context", "downstream close error")
+		}
 		return
 	}
 
@@ -68,8 +72,12 @@ func (h *TCPHandler) handleConn(downstream net.Conn) {
 			if err != nil {
 				tsproxy.ReportError(err, "context", "tcp copy error")
 			}
-			dst.Close()
-			src.Close()
+			if cerr := dst.Close(); cerr != nil {
+				tsproxy.ReportError(cerr, "context", "dst close error")
+			}
+			if cerr := src.Close(); cerr != nil {
+				tsproxy.ReportError(cerr, "context", "src close error")
+			}
 			slog.Info("tcp disconnected", "remote", downstream.RemoteAddr())
 		default:
 		}
