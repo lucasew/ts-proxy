@@ -9,6 +9,7 @@ import (
 
 	"github.com/lucasew/ts-proxy/pkg/config"
 	"github.com/lucasew/ts-proxy/pkg/handler"
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 	"golang.org/x/sync/errgroup"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/tsnet"
@@ -91,7 +92,9 @@ func (s *Server) Start(ctx context.Context) error {
 	_, err := s.ts.Up(ctx)
 	if err != nil {
 		s.mustTransition(StateFailed)
-		s.ts.Close()
+		if cerr := s.ts.Close(); cerr != nil {
+			tsproxy.ReportError(cerr, "context", "tailscale close error")
+		}
 		s.ts = nil
 		return fmt.Errorf("tailscale up: %w", err)
 	}
@@ -133,7 +136,11 @@ func (s *Server) Serve(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("listen %s: %w", hc.Listen, err)
 			}
-			defer ln.Close()
+			defer func() {
+				if cerr := ln.Close(); cerr != nil {
+					tsproxy.ReportError(cerr, "context", "listener close error")
+				}
+			}()
 
 			slog.Info("handler listening",
 				"server", s.name,
@@ -159,7 +166,11 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := s.Start(ctx); err != nil {
 		return err
 	}
-	defer s.Close()
+	defer func() {
+		if err := s.Close(); err != nil {
+			tsproxy.ReportError(err, "context", "server close error")
+		}
+	}()
 	return s.Serve(ctx)
 }
 
