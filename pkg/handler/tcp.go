@@ -11,7 +11,8 @@ import (
 
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 1<<15)
+		b := make([]byte, 1<<15)
+		return &b
 	},
 }
 
@@ -59,9 +60,9 @@ func (h *TCPHandler) handleConn(downstream net.Conn) {
 
 	first := make(chan struct{}, 1)
 	cp := func(dst, src net.Conn) {
-		buf := bufferPool.Get().([]byte)
+		buf := bufferPool.Get().(*[]byte)
 		defer bufferPool.Put(buf)
-		_, err := io.CopyBuffer(dst, src, buf)
+		_, err := io.CopyBuffer(dst, src, *buf)
 		select {
 		case first <- struct{}{}:
 			if err != nil {
