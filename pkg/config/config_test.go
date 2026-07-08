@@ -211,8 +211,7 @@ func TestSetDefaults(t *testing.T) {
 }
 
 func TestExpandEnv(t *testing.T) {
-	os.Setenv("TEST_TS_KEY", "tskey-test-value")
-	defer os.Unsetenv("TEST_TS_KEY")
+	t.Setenv("TEST_TS_KEY", "tskey-test-value")
 
 	cfg := Config{
 		Tokens: map[string]TokenConfig{
@@ -281,7 +280,9 @@ func TestTCPHandlerNoListenDefault(t *testing.T) {
 // ExpandEnv must error when a referenced variable is not set (prevents
 // silent empty auth keys in automated/container environments).
 func TestExpandEnvUnset(t *testing.T) {
-	os.Unsetenv("DEFINITELY_NOT_SET_12345")
+	if err := os.Unsetenv("DEFINITELY_NOT_SET_12345"); err != nil {
+		t.Fatalf("failed to unset env var: %v", err)
+	}
 	cfg := Config{
 		Tokens: map[string]TokenConfig{
 			"default": {AuthKey: "${DEFINITELY_NOT_SET_12345}"},
