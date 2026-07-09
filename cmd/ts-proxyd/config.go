@@ -29,6 +29,8 @@ func runConfig(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	fmt.Fprint(os.Stdout, string(out))
+	if _, err := fmt.Fprint(os.Stdout, string(out)); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
 	return nil
 }
