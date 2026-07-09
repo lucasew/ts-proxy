@@ -27,8 +27,12 @@ func init() {
 	rootCmd.PersistentFlags().String("state-dir", "", "base state directory (default /var/lib/ts-proxy)")
 	rootCmd.PersistentFlags().Bool("stop-on-fail", false, "stop all servers if any one fails")
 
-	viper.BindPFlag("state_dir", rootCmd.PersistentFlags().Lookup("state-dir"))
-	viper.BindPFlag("stop_on_fail", rootCmd.PersistentFlags().Lookup("stop-on-fail"))
+	if err := viper.BindPFlag("state_dir", rootCmd.PersistentFlags().Lookup("state-dir")); err != nil {
+		panic(fmt.Errorf("binding state-dir flag: %w", err))
+	}
+	if err := viper.BindPFlag("stop_on_fail", rootCmd.PersistentFlags().Lookup("stop-on-fail")); err != nil {
+		panic(fmt.Errorf("binding stop-on-fail flag: %w", err))
+	}
 }
 
 func initConfig() {
