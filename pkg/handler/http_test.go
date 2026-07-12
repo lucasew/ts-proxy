@@ -9,6 +9,91 @@ import (
 	"tailscale.com/tailcfg"
 )
 
+func TestHandleRedirect(t *testing.T) {
+	tests := []struct {
+		name         string
+		hostname     string
+		enableTLS    bool
+		reqHost      string
+		target       string
+		wantRedirect bool
+		wantLocation string
+	}{
+		{
+			name:         "wrong host redirects https",
+			hostname:     "app.example.ts.net",
+			enableTLS:    true,
+			reqHost:      "wrong.example.ts.net",
+			target:       "/foo?x=1",
+			wantRedirect: true,
+			wantLocation: "https://app.example.ts.net/foo?x=1",
+		},
+		{
+			name:         "wrong host with port redirects http",
+			hostname:     "app.example.ts.net",
+			enableTLS:    false,
+			reqHost:      "wrong.example.ts.net:8080",
+			target:       "/bar",
+			wantRedirect: true,
+			wantLocation: "http://app.example.ts.net/bar",
+		},
+		{
+			name:         "matching host does not redirect",
+			hostname:     "app.example.ts.net",
+			enableTLS:    true,
+			reqHost:      "app.example.ts.net",
+			target:       "/ok",
+			wantRedirect: false,
+		},
+		{
+			name:         "matching host with port does not redirect",
+			hostname:     "app.example.ts.net",
+			enableTLS:    true,
+			reqHost:      "app.example.ts.net:443",
+			target:       "/ok",
+			wantRedirect: false,
+		},
+		{
+			name:         "empty host does not redirect",
+			hostname:     "app.example.ts.net",
+			enableTLS:    true,
+			reqHost:      "",
+			target:       "/ok",
+			wantRedirect: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHTTP(HTTPOptions{
+				Hostname:  tt.hostname,
+				EnableTLS: tt.enableTLS,
+			})
+			// Server-style request: path-only URL, host only on Request.Host.
+			req := httptest.NewRequest(http.MethodGet, tt.target, nil)
+			req.Host = tt.reqHost
+			if req.URL.Host != "" {
+				t.Fatalf("precondition: URL.Host = %q, want empty for server-style request", req.URL.Host)
+			}
+
+			rec := httptest.NewRecorder()
+			got := h.handleRedirect(rec, req)
+			if got != tt.wantRedirect {
+				t.Fatalf("handleRedirect = %v, want %v", got, tt.wantRedirect)
+			}
+			if !tt.wantRedirect {
+				return
+			}
+			if rec.Code != http.StatusMovedPermanently {
+				t.Errorf("status = %d, want %d", rec.Code, http.StatusMovedPermanently)
+			}
+			if loc := rec.Header().Get("Location"); loc != tt.wantLocation {
+				t.Errorf("Location = %q, want %q", loc, tt.wantLocation)
+			}
+		})
+	}
+}
+
 func TestSetTailscaleHeadersSanitization(t *testing.T) {
 	userInfo := &apitype.WhoIsResponse{
 		UserProfile: &tailcfg.UserProfile{
