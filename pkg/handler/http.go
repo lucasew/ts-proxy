@@ -106,7 +106,12 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPHandler) handleRedirect(w http.ResponseWriter, r *http.Request) bool {
-	if r.URL.Hostname() != "" && r.URL.Hostname() != h.opts.Hostname {
+	// Server requests put the host in Request.Host; Request.URL.Host is empty.
+	host := r.Host
+	if hostname, _, err := net.SplitHostPort(host); err == nil {
+		host = hostname
+	}
+	if host != "" && host != h.opts.Hostname {
 		destinationURL := new(url.URL)
 		*destinationURL = *r.URL
 		destinationURL.Host = h.opts.Hostname
