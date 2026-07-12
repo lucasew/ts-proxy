@@ -13,6 +13,10 @@ import (
 	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 )
 
+// restartDelay is how long runWithRestart waits before starting a failed
+// server again when StopOnFail is false.
+const restartDelay = 5 * time.Second
+
 // Supervisor manages multiple servers and their lifecycles.
 type Supervisor struct {
 	cfg     *config.Config
@@ -132,10 +136,10 @@ func (s *Supervisor) runWithRestart(ctx context.Context, srv *Server) error {
 			if s.cfg.StopOnFail {
 				return fmt.Errorf("server %s: %w", srv.Name(), err)
 			}
-			slog.Info("restarting server", "name", srv.Name(), "delay", "5s")
+			slog.Info("restarting server", "name", srv.Name(), "delay", restartDelay.String())
 			srv.ResetState()
 			select {
-			case <-time.After(5 * time.Second):
+			case <-time.After(restartDelay):
 			case <-ctx.Done():
 				return nil
 			}
