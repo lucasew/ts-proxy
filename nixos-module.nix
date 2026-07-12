@@ -195,7 +195,7 @@ in
 
     systemd.tmpfiles.rules = [ "d ${cfg.dataDir} 0700 ${cfg.user} ${cfg.group} - -" ];
 
-    systemd.slices.ts-proxys.sliceConfig = {
+    systemd.slices.ts-proxy.sliceConfig = {
       CPUQuota = "10%";
       MemoryHigh = "256M";
       MemoryMax = "384M";
