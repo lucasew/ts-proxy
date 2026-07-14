@@ -128,13 +128,19 @@ func (h *HTTPHandler) handleRedirect(w http.ResponseWriter, r *http.Request) boo
 }
 
 func (h *HTTPHandler) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del(HeaderXForwardedProto)
+	for k := range r.Header {
+		normalized := strings.ReplaceAll(k, "_", "-")
+		if strings.EqualFold(normalized, HeaderXForwardedProto) ||
+			strings.EqualFold(normalized, HeaderXForwardedHost) {
+			delete(r.Header, k)
+		}
+	}
+
 	if h.opts.EnableTLS {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTPS)
 	} else {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTP)
 	}
-	r.Header.Del(HeaderXForwardedHost)
 	r.Header.Set(HeaderXForwardedHost, h.opts.Hostname)
 	slog.Info("request",
 		"method", r.Method,
