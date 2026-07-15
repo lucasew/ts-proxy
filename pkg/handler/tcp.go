@@ -2,12 +2,19 @@ package handler
 
 import (
 	"context"
-	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 	"io"
 	"log/slog"
 	"net"
 	"sync"
+	"time"
+
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 )
+
+// DefaultTCPDialTimeout is how long handleConn waits when dialing upstream
+// before giving up. Unlimited dials can pin a goroutine forever against a
+// blackholed or slow peer.
+const DefaultTCPDialTimeout = 10 * time.Second
 
 var bufferPool = sync.Pool{
 	New: func() interface{} {
@@ -20,6 +27,7 @@ var bufferPool = sync.Pool{
 type TCPHandler struct {
 	upstreamNetwork string
 	upstreamAddress string
+	dialTimeout     time.Duration
 }
 
 // NewTCP creates a handler that forwards raw TCP connections.
@@ -27,6 +35,7 @@ func NewTCP(upstreamNetwork, upstreamAddress string) *TCPHandler {
 	return &TCPHandler{
 		upstreamNetwork: upstreamNetwork,
 		upstreamAddress: upstreamAddress,
+		dialTimeout:     DefaultTCPDialTimeout,
 	}
 }
 
@@ -53,7 +62,11 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 }
 
 func (h *TCPHandler) handleConn(downstream net.Conn) {
-	upstream, err := net.Dial(h.upstreamNetwork, h.upstreamAddress)
+	timeout := h.dialTimeout
+	if timeout <= 0 {
+		timeout = DefaultTCPDialTimeout
+	}
+	upstream, err := net.DialTimeout(h.upstreamNetwork, h.upstreamAddress, timeout)
 	if err != nil {
 		tsproxy.ReportError(err, "context", "tcp dial upstream", "upstream", h.upstreamAddress)
 		if cerr := downstream.Close(); cerr != nil {
