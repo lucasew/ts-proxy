@@ -56,9 +56,16 @@ func (s *Supervisor) Servers() []*Server {
 
 // StartAll authenticates all servers without serving traffic.
 // Used for dry-run mode.
+// If any server fails to start, servers that already authenticated are closed
+// before the error is returned so tsnet nodes are not left running.
 func (s *Supervisor) StartAll(ctx context.Context) error {
-	for _, srv := range s.servers {
+	for i, srv := range s.servers {
 		if err := srv.Start(ctx); err != nil {
+			for j := 0; j < i; j++ {
+				if cerr := s.servers[j].Close(); cerr != nil {
+					tsproxy.ReportError(cerr, "context", "close error after start failure", "server", s.servers[j].Name())
+				}
+			}
 			return fmt.Errorf("server %s: %w", srv.Name(), err)
 		}
 	}

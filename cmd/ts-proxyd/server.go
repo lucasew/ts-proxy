@@ -47,10 +47,12 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	if dryRun {
 		slog.Info("dry-run mode: authenticating servers...")
+		// Always tear down tsnet nodes, including when StartAll fails partway
+		// (StartAll also closes earlier successes; CloseAll is idempotent).
+		defer sup.CloseAll()
 		if err := sup.StartAll(ctx); err != nil {
 			return fmt.Errorf("dry-run auth: %w", err)
 		}
-		defer sup.CloseAll()
 
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprint(os.Stderr, "Authenticated servers:\n")
