@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"tailscale.com/client/tailscale/apitype"
@@ -89,6 +90,88 @@ func TestHandleRedirect(t *testing.T) {
 			}
 			if loc := rec.Header().Get("Location"); loc != tt.wantLocation {
 				t.Errorf("Location = %q, want %q", loc, tt.wantLocation)
+			}
+		})
+	}
+}
+
+func TestEnrichHeadersStripsXForwardedVariants(t *testing.T) {
+	userInfo := &apitype.WhoIsResponse{
+		UserProfile: &tailcfg.UserProfile{
+			LoginName:     "user@example.com",
+			DisplayName:   "User Name",
+			ProfilePicURL: "http://example.com/pic.jpg",
+		},
+	}
+
+	tests := []struct {
+		name           string
+		enableTLS      bool
+		initialHeaders map[string]string
+		wantProto      string
+		wantHost       string
+	}{
+		{
+			name:      "underscore proto and host spoofing",
+			enableTLS: true,
+			initialHeaders: map[string]string{
+				"X_Forwarded_Proto": "http",
+				"X_Forwarded_Host":  "evil.example.com",
+			},
+			wantProto: SchemeHTTPS,
+			wantHost:  "app.example.ts.net",
+		},
+		{
+			name:      "mixed-case underscore spoofing over http",
+			enableTLS: false,
+			initialHeaders: map[string]string{
+				"X_FORWARDED_PROTO": "https",
+				"x_forwarded_host":  "evil.example.com",
+			},
+			wantProto: SchemeHTTP,
+			wantHost:  "app.example.ts.net",
+		},
+		{
+			name:      "canonical dash keys replaced",
+			enableTLS: true,
+			initialHeaders: map[string]string{
+				"X-Forwarded-Proto": "http",
+				"X-Forwarded-Host":  "evil.example.com",
+			},
+			wantProto: SchemeHTTPS,
+			wantHost:  "app.example.ts.net",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHTTP(HTTPOptions{
+				Hostname:  "app.example.ts.net",
+				EnableTLS: tt.enableTLS,
+			})
+			req := httptest.NewRequest(http.MethodGet, "http://app.example.ts.net/x", nil)
+			for k, v := range tt.initialHeaders {
+				req.Header.Set(k, v)
+			}
+
+			h.enrichHeaders(req, userInfo)
+
+			if got := req.Header.Get(HeaderXForwardedProto); got != tt.wantProto {
+				t.Errorf("X-Forwarded-Proto = %q, want %q", got, tt.wantProto)
+			}
+			if got := req.Header.Get(HeaderXForwardedHost); got != tt.wantHost {
+				t.Errorf("X-Forwarded-Host = %q, want %q", got, tt.wantHost)
+			}
+			// Underscore (or other non-canonical) variants must not remain as
+			// separate map keys alongside the values we set.
+			for k := range req.Header {
+				if strings.Contains(k, "_") {
+					normalized := strings.ReplaceAll(k, "_", "-")
+					if strings.EqualFold(normalized, HeaderXForwardedProto) ||
+						strings.EqualFold(normalized, HeaderXForwardedHost) {
+						t.Errorf("spoofed variant key still present: %q", k)
+					}
+				}
 			}
 		})
 	}

@@ -128,13 +128,14 @@ func (h *HTTPHandler) handleRedirect(w http.ResponseWriter, r *http.Request) boo
 }
 
 func (h *HTTPHandler) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	r.Header.Del(HeaderXForwardedProto)
+	// Strip client-supplied X-Forwarded-* variants (including underscore
+	// forms that http.Header.Del does not remove) before setting ours.
+	deleteHeaderVariants(r.Header, HeaderXForwardedProto, HeaderXForwardedHost)
 	if h.opts.EnableTLS {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTPS)
 	} else {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTP)
 	}
-	r.Header.Del(HeaderXForwardedHost)
 	r.Header.Set(HeaderXForwardedHost, h.opts.Hostname)
 	slog.Info("request",
 		"method", r.Method,
@@ -145,17 +146,30 @@ func (h *HTTPHandler) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResp
 	SetTailscaleHeaders(r, userInfo)
 }
 
-// SetTailscaleHeaders sanitizes and sets Tailscale user identity headers.
-func SetTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
-	for k := range r.Header {
+// deleteHeaderVariants removes every header key whose name matches any of
+// names after normalizing "_" to "-" (case-insensitive). http.Header.Del only
+// drops the canonical MIME key, so spoofed X_Forwarded_Proto-style keys would
+// otherwise survive and confuse upstreams that treat "_" and "-" as equivalent.
+func deleteHeaderVariants(h http.Header, names ...string) {
+	for k := range h {
 		normalized := strings.ReplaceAll(k, "_", "-")
-		if strings.EqualFold(normalized, TailscaleUserLoginHeader) ||
-			strings.EqualFold(normalized, TailscaleUserNameHeader) ||
-			strings.EqualFold(normalized, TailscaleUserProfilePicHeader) ||
-			strings.EqualFold(normalized, TailscaleHeadersInfoHeader) {
-			delete(r.Header, k)
+		for _, name := range names {
+			if strings.EqualFold(normalized, name) {
+				delete(h, k)
+				break
+			}
 		}
 	}
+}
+
+// SetTailscaleHeaders sanitizes and sets Tailscale user identity headers.
+func SetTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
+	deleteHeaderVariants(r.Header,
+		TailscaleUserLoginHeader,
+		TailscaleUserNameHeader,
+		TailscaleUserProfilePicHeader,
+		TailscaleHeadersInfoHeader,
+	)
 	r.Header.Set(TailscaleUserLoginHeader, userInfo.UserProfile.LoginName)
 	r.Header.Set(TailscaleUserNameHeader, userInfo.UserProfile.DisplayName)
 	r.Header.Set(TailscaleUserProfilePicHeader, userInfo.UserProfile.ProfilePicURL)
