@@ -70,11 +70,17 @@ func (c *Config) SetDefaults() {
 		}
 		for i := range srv.Handlers {
 			h := &srv.Handlers[i]
+			// Funnel always terminates TLS at the Tailscale edge. Force TLS so
+			// X-Forwarded-Proto, host redirects, and display flags match reality
+			// when operators set funnel: true without an explicit tls: true.
+			if h.Funnel {
+				h.TLS = true
+			}
 			if h.UpstreamNetwork == "" {
 				h.UpstreamNetwork = "tcp"
 			}
 			if h.Listen == "" && h.Type == "http" {
-				if h.TLS || h.Funnel {
+				if h.TLS {
 					h.Listen = ":443"
 				} else {
 					h.Listen = ":80"

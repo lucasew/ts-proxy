@@ -194,9 +194,11 @@ func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handl
 	case "tcp":
 		return handler.NewTCP(hc.UpstreamNetwork, hc.UpstreamAddress), nil
 	case "http":
+		// Funnel always serves TLS at the edge; honor that even if the
+		// handler config omitted tls (SetDefaults also normalizes this).
 		return handler.NewHTTP(handler.HTTPOptions{
 			Hostname:        fqdn,
-			EnableTLS:       hc.TLS,
+			EnableTLS:       hc.TLS || hc.Funnel,
 			UpstreamAddress: hc.UpstreamAddress,
 			UpstreamNetwork: hc.UpstreamNetwork,
 			WhoIs:           whoIs,
