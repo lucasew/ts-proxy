@@ -1,13 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
-	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -18,6 +17,10 @@ var rootCmd = &cobra.Command{
 	Use:   "ts-proxyd",
 	Short: "Tailscale reverse proxy server",
 	Long:  "ts-proxyd exposes services to a Tailnet (and optionally the Internet via Funnel) using Tailscale tsnet.",
+	// main prints a single "Error: …" line; avoid cobra duplicating it and
+	// dumping full usage on routine config mistakes (use --help for usage).
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 func init() {
@@ -35,6 +38,9 @@ func init() {
 	}
 }
 
+// initConfig wires viper search paths and env bindings. Reading the file is
+// deferred to loadConfig so failures surface as normal cobra command errors
+// instead of os.Exit from OnInitialize.
 func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
@@ -49,18 +55,21 @@ func initConfig() {
 	viper.SetEnvPrefix("TS_PROXY")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
+}
 
+func loadConfig() (*config.Config, error) {
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			tsproxy.ReportError(err, "context", "reading config file")
-			os.Exit(1)
+		var notFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &notFound) {
+			// Explicit --config path missing, unreadable, or invalid YAML:
+			// this is a user-facing configuration error, not an unexpected
+			// runtime fault for ReportError.
+			return nil, fmt.Errorf("reading config file: %w", err)
 		}
 	} else {
 		slog.Info("using config file", "path", viper.ConfigFileUsed())
 	}
-}
 
-func loadConfig() (*config.Config, error) {
 	var cfg config.Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
