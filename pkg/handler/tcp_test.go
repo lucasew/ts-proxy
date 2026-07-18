@@ -128,6 +128,93 @@ func TestHandleConnProxiesBytes(t *testing.T) {
 	wg.Wait()
 }
 
+// TestServeHalfCloseDeliversResponse ensures that when the client finishes
+// writing and half-closes, the upstream can still send a full response.
+// The previous proxy closed both ends when the first copy finished, which
+// truncated the reverse direction for half-close protocols.
+func TestServeHalfCloseDeliversResponse(t *testing.T) {
+	upLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("upstream listen: %v", err)
+	}
+	defer upLn.Close()
+
+	upDone := make(chan struct{})
+	go func() {
+		defer close(upDone)
+		c, err := upLn.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		// Read until client CloseWrite (EOF), then reply.
+		req, err := io.ReadAll(c)
+		if err != nil {
+			return
+		}
+		// Small delay so a buggy first-finisher-closes-both proxy would
+		// already have torn down the client side.
+		time.Sleep(50 * time.Millisecond)
+		_, _ = c.Write([]byte("pong:" + string(req)))
+	}()
+
+	h := NewTCP("tcp", upLn.Addr().String())
+	proxyLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("proxy listen: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- h.Serve(ctx, proxyLn)
+	}()
+
+	client, err := net.Dial("tcp", proxyLn.Addr().String())
+	if err != nil {
+		t.Fatalf("dial proxy: %v", err)
+	}
+	defer client.Close()
+
+	if _, err := client.Write([]byte("ping")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	tcpClient, ok := client.(*net.TCPConn)
+	if !ok {
+		t.Fatal("client is not *net.TCPConn; cannot CloseWrite")
+	}
+	if err := tcpClient.CloseWrite(); err != nil {
+		t.Fatalf("CloseWrite: %v", err)
+	}
+
+	if err := client.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline: %v", err)
+	}
+	resp, err := io.ReadAll(client)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if got := string(resp); got != "pong:ping" {
+		t.Fatalf("response = %q, want %q", got, "pong:ping")
+	}
+
+	cancel()
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after cancel")
+	}
+	select {
+	case <-upDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("upstream did not finish")
+	}
+}
+
 // TestServeClosesActiveConnsOnCancel ensures cancelling Serve tears down
 // in-flight proxy sessions, not only the accept loop listener.
 func TestServeClosesActiveConnsOnCancel(t *testing.T) {

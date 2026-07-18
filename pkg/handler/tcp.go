@@ -121,29 +121,52 @@ func (h *TCPHandler) handleConn(ctx context.Context, downstream net.Conn) {
 	h.track(upstream)
 	defer h.untrack(upstream)
 
-	first := make(chan struct{}, 1)
+	// Proxy each direction independently. When one side finishes writing we
+	// half-close (CloseWrite) the destination so the peer can still finish
+	// sending the other way. Closing both ends on the first completed copy
+	// would truncate responses for protocols that half-close after a request
+	// (and for any asymmetric transfer).
+	var wg sync.WaitGroup
 	cp := func(dst, src net.Conn) {
+		defer wg.Done()
 		buf := bufferPool.Get().(*[]byte)
 		defer bufferPool.Put(buf)
 		_, err := io.CopyBuffer(dst, src, *buf)
-		select {
-		case first <- struct{}{}:
-			// Context cancel force-closes both ends; copy/close errors then
-			// are expected and not reported as unexpected failures.
-			shutdown := ctx.Err() != nil
-			if err != nil && !shutdown {
-				tsproxy.ReportError(err, "context", "tcp copy error")
-			}
-			if cerr := dst.Close(); cerr != nil && !shutdown {
-				tsproxy.ReportError(cerr, "context", "dst close error")
-			}
-			if cerr := src.Close(); cerr != nil && !shutdown {
-				tsproxy.ReportError(cerr, "context", "src close error")
-			}
-			slog.Info("tcp disconnected", "remote", downstream.RemoteAddr())
-		default:
+		// Context cancel force-closes both ends; copy errors then are expected.
+		shutdown := ctx.Err() != nil
+		if err != nil && !shutdown {
+			tsproxy.ReportError(err, "context", "tcp copy error")
 		}
+		closeWrite(dst)
 	}
+	wg.Add(2)
 	go cp(downstream, upstream)
-	cp(upstream, downstream)
+	go cp(upstream, downstream)
+	wg.Wait()
+
+	// Full close after both directions finish (or are aborted by cancel).
+	// Errors are expected when closeActive already tore the conns down.
+	_ = downstream.Close()
+	_ = upstream.Close()
+	slog.Info("tcp disconnected", "remote", downstream.RemoteAddr())
+}
+
+// closeWriter is implemented by *net.TCPConn (and similar) to shut down only
+// the write half of a full-duplex connection.
+type closeWriter interface {
+	CloseWrite() error
+}
+
+// closeWrite half-closes dst for writing when supported so the reverse copy
+// can still deliver remaining data. For conns without CloseWrite (e.g.
+// net.Pipe in tests), fall back to a full Close so the peer unblocks.
+//
+// CloseWrite/Close errors here are almost always "use of closed network
+// connection" from a racing teardown; ignore them like closeActive does.
+func closeWrite(dst net.Conn) {
+	if cw, ok := dst.(closeWriter); ok {
+		_ = cw.CloseWrite()
+		return
+	}
+	_ = dst.Close()
 }
