@@ -26,7 +26,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ./ts-proxy.yaml, /etc/ts-proxy/ts-proxy.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ./ts-proxy.yaml, then $HOME/.config/ts-proxy/, then /etc/ts-proxy/)")
 	rootCmd.PersistentFlags().String("state-dir", "", "base state directory (default /var/lib/ts-proxy)")
 	rootCmd.PersistentFlags().Bool("stop-on-fail", false, "stop all servers if any one fails")
 
@@ -35,6 +35,18 @@ func init() {
 	}
 	if err := viper.BindPFlag("stop_on_fail", rootCmd.PersistentFlags().Lookup("stop-on-fail")); err != nil {
 		panic(fmt.Errorf("binding stop-on-fail flag: %w", err))
+	}
+}
+
+// defaultConfigPaths is the search order when --config is not set.
+// Viper uses the first ts-proxy.yaml it finds; put the working directory
+// first so a local file is not shadowed by /etc or the home config dir
+// (matches README and common CLI expectation).
+func defaultConfigPaths() []string {
+	return []string{
+		".",
+		"$HOME/.config/ts-proxy",
+		"/etc/ts-proxy",
 	}
 }
 
@@ -47,9 +59,9 @@ func initConfig() {
 	} else {
 		viper.SetConfigName("ts-proxy")
 		viper.SetConfigType("yaml")
-		viper.AddConfigPath("/etc/ts-proxy")
-		viper.AddConfigPath("$HOME/.config/ts-proxy")
-		viper.AddConfigPath(".")
+		for _, p := range defaultConfigPaths() {
+			viper.AddConfigPath(p)
+		}
 	}
 
 	viper.SetEnvPrefix("TS_PROXY")
