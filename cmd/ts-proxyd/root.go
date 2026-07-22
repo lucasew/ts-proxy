@@ -86,10 +86,17 @@ func loadConfig() (*config.Config, error) {
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
+	// Defaults first so missing fields are filled before expansion runs.
 	cfg.SetDefaults()
 	if err := cfg.ExpandEnv(); err != nil {
 		return nil, fmt.Errorf("expanding environment variables: %w", err)
 	}
+	// ExpandEnv treats a set-but-empty env var as success and substitutes "".
+	// That can wipe values that only looked non-empty because they were
+	// "${VAR}" placeholders (e.g. state_dir: "${STATE_DIR}" with STATE_DIR=).
+	// Re-apply defaults so empty expansions fall back instead of shipping a
+	// blank state_dir / hostname / listen into Validate and runtime.
+	cfg.SetDefaults()
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validating config: %w", err)
 	}
