@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -10,27 +11,52 @@ import (
 
 func TestDefaultConfigPathsPreferWorkingDirectory(t *testing.T) {
 	paths := defaultConfigPaths()
-	if len(paths) < 3 {
-		t.Fatalf("defaultConfigPaths() len = %d, want at least 3", len(paths))
+	if len(paths) < 2 {
+		t.Fatalf("defaultConfigPaths() len = %d, want at least cwd and /etc", len(paths))
 	}
 	if paths[0] != "." {
 		t.Errorf("first search path = %q, want %q so cwd wins over system paths", paths[0], ".")
 	}
-	// Home before /etc so a user config still beats the system file.
-	homeIdx, etcIdx := -1, -1
+
+	etcIdx := -1
+	homeIdx := -1
 	for i, p := range paths {
-		if p == "$HOME/.config/ts-proxy" {
-			homeIdx = i
-		}
 		if p == "/etc/ts-proxy" {
 			etcIdx = i
 		}
+		// Real absolute home path — never a literal "$HOME/..." placeholder.
+		if strings.Contains(p, "$HOME") {
+			t.Errorf("path %q still contains literal $HOME; want os.UserHomeDir resolution", p)
+		}
 	}
-	if homeIdx < 0 || etcIdx < 0 {
-		t.Fatalf("paths = %v, want both $HOME/.config/ts-proxy and /etc/ts-proxy", paths)
+	if etcIdx < 0 {
+		t.Fatalf("paths = %v, want /etc/ts-proxy", paths)
 	}
+
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		// No home dir available: only cwd + /etc is fine.
+		if len(paths) != 2 {
+			t.Fatalf("paths = %v, want [., /etc/ts-proxy] when UserHomeDir fails", paths)
+		}
+		return
+	}
+	wantHome := filepath.Join(home, ".config", "ts-proxy")
+	for i, p := range paths {
+		if p == wantHome {
+			homeIdx = i
+			break
+		}
+	}
+	if homeIdx < 0 {
+		t.Fatalf("paths = %v, want home config dir %q", paths, wantHome)
+	}
+	// Home before /etc so a user config still beats the system file.
 	if homeIdx > etcIdx {
 		t.Errorf("home path index %d after /etc index %d; user config should win over system", homeIdx, etcIdx)
+	}
+	if !filepath.IsAbs(wantHome) {
+		t.Fatalf("resolved home config path %q is not absolute", wantHome)
 	}
 }
 
