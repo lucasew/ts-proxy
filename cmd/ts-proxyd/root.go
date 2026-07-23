@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
@@ -42,12 +44,19 @@ func init() {
 // Viper uses the first ts-proxy.yaml it finds; put the working directory
 // first so a local file is not shadowed by /etc or the home config dir
 // (matches README and common CLI expectation).
+//
+// The user config dir is resolved with os.UserHomeDir + filepath.Join, not the
+// literal string "$HOME/.config/ts-proxy". Viper only rewrites paths that are
+// exactly "$HOME" or that use the OS path separator after "$HOME"; a hard-coded
+// "$HOME/.config/..." therefore fails to expand on Windows (separator is '\')
+// and becomes a broken relative path after os.ExpandEnv when HOME is unset.
 func defaultConfigPaths() []string {
-	return []string{
-		".",
-		"$HOME/.config/ts-proxy",
-		"/etc/ts-proxy",
+	paths := []string{"."}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		paths = append(paths, filepath.Join(home, ".config", "ts-proxy"))
 	}
+	paths = append(paths, "/etc/ts-proxy")
+	return paths
 }
 
 // initConfig wires viper search paths and env bindings. Reading the file is
