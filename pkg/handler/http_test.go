@@ -5,10 +5,39 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/tailcfg"
 )
+
+// TestHTTPUpstreamDialTimeout ensures a blackholed upstream cannot pin
+// ServeHTTP forever. 192.0.2.0/24 is TEST-NET-1 (RFC 5737) and is not routed
+// on the public Internet; combined with a short dial timeout this should fail
+// quickly (mirrors TestHandleConnDialTimeout for TCP).
+func TestHTTPUpstreamDialTimeout(t *testing.T) {
+	h := NewHTTP(HTTPOptions{
+		Hostname:        "app.example.ts.net",
+		UpstreamNetwork: "tcp",
+		UpstreamAddress: "192.0.2.1:9",
+	})
+	h.dialTimeout = 200 * time.Millisecond
+
+	req := httptest.NewRequest(http.MethodGet, "http://app.example.ts.net/", nil)
+	rec := httptest.NewRecorder()
+
+	start := time.Now()
+	h.ServeHTTP(rec, req)
+	elapsed := time.Since(start)
+
+	if elapsed > time.Second {
+		t.Fatalf("ServeHTTP took %v, want roughly dialTimeout", elapsed)
+	}
+	// ReverseProxy's default ErrorHandler responds 502 on dial failure.
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadGateway)
+	}
+}
 
 func TestHandleRedirect(t *testing.T) {
 	tests := []struct {
