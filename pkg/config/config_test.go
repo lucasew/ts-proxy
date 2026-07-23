@@ -333,7 +333,8 @@ func TestMultipleServersOneToken(t *testing.T) {
 	}
 }
 
-// Regression: handler with funnel but not TLS should still default listen to :443
+// Regression: handler with funnel but not TLS should still default listen to
+// :443 and have TLS enabled (Funnel always terminates TLS at the edge).
 func TestFunnelDefaultsTo443(t *testing.T) {
 	cfg := Config{
 		Servers: map[string]ServerConfig{
@@ -346,8 +347,35 @@ func TestFunnelDefaultsTo443(t *testing.T) {
 	}
 	cfg.SetDefaults()
 
-	if cfg.Servers["myapp"].Handlers[0].Listen != ":443" {
-		t.Errorf("funnel handler should default to :443, got %q", cfg.Servers["myapp"].Handlers[0].Listen)
+	h := cfg.Servers["myapp"].Handlers[0]
+	if h.Listen != ":443" {
+		t.Errorf("funnel handler should default to :443, got %q", h.Listen)
+	}
+	if !h.TLS {
+		t.Error("funnel handler should imply tls: true after SetDefaults")
+	}
+}
+
+// Funnel without an explicit tls flag must still surface as TLS in display
+// output (HTTP+TLS+Funnel), matching edge termination.
+func TestFunnelImpliesTLSInDisplay(t *testing.T) {
+	cfg := Config{
+		Servers: map[string]ServerConfig{
+			"web": {
+				Hostname: "web",
+				Handlers: []HandlerConfig{
+					{Type: "http", UpstreamAddress: "localhost:8080", Funnel: true},
+				},
+			},
+		},
+	}
+	cfg.SetDefaults()
+	s := cfg.DisplayString()
+	if !strings.Contains(s, "TLS") {
+		t.Errorf("DisplayString after funnel-only config should show TLS, got %q", s)
+	}
+	if !strings.Contains(s, "Funnel") {
+		t.Errorf("DisplayString after funnel-only config should show Funnel, got %q", s)
 	}
 }
 
