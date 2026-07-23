@@ -145,13 +145,35 @@ func (s *Supervisor) runWithRestart(ctx context.Context, srv *Server) error {
 			}
 			slog.Info("restarting server", "name", srv.Name(), "delay", restartDelay.String())
 			srv.ResetState()
-			select {
-			case <-time.After(restartDelay):
-			case <-ctx.Done():
+			if !waitRestart(ctx, restartDelay) {
 				return nil
 			}
 			continue
 		}
 		return nil
+	}
+}
+
+// waitRestart blocks until delay elapses or ctx is cancelled.
+// Returns true when the delay completed (caller should restart), false when
+// ctx was cancelled (caller should stop).
+//
+// Uses time.NewTimer instead of time.After so a cancelled wait does not leave
+// a timer and its values channel live until the delay fires (important in the
+// restart loop, which may run for the life of the process).
+func waitRestart(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		if !timer.Stop() {
+			// timer already fired; drain so the channel can be GC'd
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		return false
 	}
 }
