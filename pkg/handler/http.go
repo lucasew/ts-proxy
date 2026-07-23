@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	"github.com/lucasew/ts-proxy/pkg/tsproxy"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lucasew/ts-proxy/pkg/tsproxy"
+	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
 )
 
@@ -20,8 +22,13 @@ const (
 	TailscaleUserProfilePicHeader = "Tailscale-User-Profile-Pic"
 	TailscaleHeadersInfoHeader    = "Tailscale-Headers-Info"
 
+	// taggedDevicesLogin is the LoginName WhoIs returns for tagged nodes.
+	// Official Tailscale serve omits identity headers for tagged devices.
+	taggedDevicesLogin = "tagged-devices"
+
 	HeaderXForwardedProto = "X-Forwarded-Proto"
 	HeaderXForwardedHost  = "X-Forwarded-Host"
+	HeaderXForwardedFor   = "X-Forwarded-For"
 
 	SchemeHTTP  = "http"
 	SchemeHTTPS = "https"
@@ -93,9 +100,15 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.opts.WhoIs != nil {
 		userInfo, err := h.opts.WhoIs(r.Context(), r.RemoteAddr)
 		if err != nil {
-			tsproxy.ReportError(err, "context", "http whois error")
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			// Public Funnel (and other non-tailnet) clients have no peer
+			// identity. Match Tailscale serve: continue without identity
+			// headers instead of failing the request.
+			if !errors.Is(err, local.ErrPeerNotFound) {
+				tsproxy.ReportError(err, "context", "http whois error")
+				http.Error(w, "whois failed", http.StatusInternalServerError)
+				return
+			}
+			userInfo = nil
 		}
 		if h.handleRedirect(w, r) {
 			return
@@ -130,20 +143,50 @@ func (h *HTTPHandler) handleRedirect(w http.ResponseWriter, r *http.Request) boo
 func (h *HTTPHandler) enrichHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
 	// Strip client-supplied X-Forwarded-* variants (including underscore
 	// forms that http.Header.Del does not remove) before setting ours.
-	deleteHeaderVariants(r.Header, HeaderXForwardedProto, HeaderXForwardedHost)
+	// X-Forwarded-For is only stripped: httputil.ReverseProxy appends the
+	// real client IP itself, so setting it here would duplicate the value.
+	deleteHeaderVariants(r.Header, HeaderXForwardedProto, HeaderXForwardedHost, HeaderXForwardedFor)
 	if h.opts.EnableTLS {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTPS)
 	} else {
 		r.Header.Set(HeaderXForwardedProto, SchemeHTTP)
 	}
 	r.Header.Set(HeaderXForwardedHost, h.opts.Hostname)
+
+	login := ""
+	if userInfo != nil && userInfo.UserProfile != nil {
+		login = userInfo.UserProfile.LoginName
+	}
 	slog.Info("request",
 		"method", r.Method,
-		"user", userInfo.UserProfile.LoginName,
+		"user", login,
 		"host", r.Host,
 		"url", r.URL.String(),
 	)
-	SetTailscaleHeaders(r, userInfo)
+
+	// Always strip client-supplied identity headers. Only set them when
+	// WhoIs returned a real user (not funnel/public and not tagged devices).
+	if hasTailscaleUserIdentity(userInfo) {
+		SetTailscaleHeaders(r, userInfo)
+	} else {
+		deleteHeaderVariants(r.Header,
+			TailscaleUserLoginHeader,
+			TailscaleUserNameHeader,
+			TailscaleUserProfilePicHeader,
+			TailscaleHeadersInfoHeader,
+		)
+	}
+}
+
+// hasTailscaleUserIdentity reports whether WhoIs yielded a user identity we
+// should forward. Matches Tailscale serve: no headers for missing peers,
+// empty profiles, or tagged devices.
+func hasTailscaleUserIdentity(userInfo *apitype.WhoIsResponse) bool {
+	if userInfo == nil || userInfo.UserProfile == nil {
+		return false
+	}
+	login := userInfo.UserProfile.LoginName
+	return login != "" && login != taggedDevicesLogin
 }
 
 // deleteHeaderVariants removes every header key whose name matches any of
@@ -163,6 +206,7 @@ func deleteHeaderVariants(h http.Header, names ...string) {
 }
 
 // SetTailscaleHeaders sanitizes and sets Tailscale user identity headers.
+// Caller must ensure userInfo has a non-nil UserProfile (see hasTailscaleUserIdentity).
 func SetTailscaleHeaders(r *http.Request, userInfo *apitype.WhoIsResponse) {
 	deleteHeaderVariants(r.Header,
 		TailscaleUserLoginHeader,
