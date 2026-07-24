@@ -78,7 +78,7 @@ jobs:
       run: mise ci
 
     - name: Login to registry
-      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      uses: docker/login-action@06fb636fac595d6fb4b28a5dfcb21a6f5091859c # v4
       if: github.event.inputs.new_version != '' && github.event_name != 'pull_request'
       with:
         registry: ${{ env.REGISTRY }}
