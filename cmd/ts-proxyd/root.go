@@ -28,7 +28,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ./ts-proxy.yaml, then $HOME/.config/ts-proxy/, then /etc/ts-proxy/)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ./ts-proxy.yaml, then $XDG_CONFIG_HOME/ts-proxy/ or ~/.config/ts-proxy/, then /etc/ts-proxy/)")
 	rootCmd.PersistentFlags().String("state-dir", "", "base state directory (default /var/lib/ts-proxy)")
 	rootCmd.PersistentFlags().Bool("stop-on-fail", false, "stop all servers if any one fails")
 
@@ -42,18 +42,17 @@ func init() {
 
 // defaultConfigPaths is the search order when --config is not set.
 // Viper uses the first ts-proxy.yaml it finds; put the working directory
-// first so a local file is not shadowed by /etc or the home config dir
+// first so a local file is not shadowed by /etc or the user config dir
 // (matches README and common CLI expectation).
 //
-// The user config dir is resolved with os.UserHomeDir + filepath.Join, not the
-// literal string "$HOME/.config/ts-proxy". Viper only rewrites paths that are
-// exactly "$HOME" or that use the OS path separator after "$HOME"; a hard-coded
-// "$HOME/.config/..." therefore fails to expand on Windows (separator is '\')
-// and becomes a broken relative path after os.ExpandEnv when HOME is unset.
+// The user config dir is resolved with os.UserConfigDir (XDG_CONFIG_HOME on
+// Unix, %AppData% on Windows), not a hard-coded "$HOME/.config/..." string and
+// not UserHomeDir+"/.config". Hard-coded "$HOME/..." fails to expand on
+// Windows and ignores XDG_CONFIG_HOME when users keep config outside $HOME.
 func defaultConfigPaths() []string {
 	paths := []string{"."}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		paths = append(paths, filepath.Join(home, ".config", "ts-proxy"))
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		paths = append(paths, filepath.Join(dir, "ts-proxy"))
 	}
 	paths = append(paths, "/etc/ts-proxy")
 	return paths

@@ -19,44 +19,76 @@ func TestDefaultConfigPathsPreferWorkingDirectory(t *testing.T) {
 	}
 
 	etcIdx := -1
-	homeIdx := -1
+	userIdx := -1
 	for i, p := range paths {
 		if p == "/etc/ts-proxy" {
 			etcIdx = i
 		}
-		// Real absolute home path — never a literal "$HOME/..." placeholder.
-		if strings.Contains(p, "$HOME") {
-			t.Errorf("path %q still contains literal $HOME; want os.UserHomeDir resolution", p)
+		// Real absolute path — never a literal "$HOME/..." or "$XDG_..." placeholder.
+		if strings.Contains(p, "$HOME") || strings.Contains(p, "$XDG_") {
+			t.Errorf("path %q still contains literal env placeholder; want os.UserConfigDir resolution", p)
 		}
 	}
 	if etcIdx < 0 {
 		t.Fatalf("paths = %v, want /etc/ts-proxy", paths)
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		// No home dir available: only cwd + /etc is fine.
+	userCfg, err := os.UserConfigDir()
+	if err != nil || userCfg == "" {
+		// No user config dir available: only cwd + /etc is fine.
 		if len(paths) != 2 {
-			t.Fatalf("paths = %v, want [., /etc/ts-proxy] when UserHomeDir fails", paths)
+			t.Fatalf("paths = %v, want [., /etc/ts-proxy] when UserConfigDir fails", paths)
 		}
 		return
 	}
-	wantHome := filepath.Join(home, ".config", "ts-proxy")
+	wantUser := filepath.Join(userCfg, "ts-proxy")
 	for i, p := range paths {
-		if p == wantHome {
-			homeIdx = i
+		if p == wantUser {
+			userIdx = i
 			break
 		}
 	}
-	if homeIdx < 0 {
-		t.Fatalf("paths = %v, want home config dir %q", paths, wantHome)
+	if userIdx < 0 {
+		t.Fatalf("paths = %v, want user config dir %q", paths, wantUser)
 	}
-	// Home before /etc so a user config still beats the system file.
-	if homeIdx > etcIdx {
-		t.Errorf("home path index %d after /etc index %d; user config should win over system", homeIdx, etcIdx)
+	// User config before /etc so a user file still beats the system file.
+	if userIdx > etcIdx {
+		t.Errorf("user path index %d after /etc index %d; user config should win over system", userIdx, etcIdx)
 	}
-	if !filepath.IsAbs(wantHome) {
-		t.Fatalf("resolved home config path %q is not absolute", wantHome)
+	if !filepath.IsAbs(wantUser) {
+		t.Fatalf("resolved user config path %q is not absolute", wantUser)
+	}
+}
+
+// TestDefaultConfigPathsHonorsXDGConfigHome ensures a custom XDG_CONFIG_HOME
+// is used instead of hard-coding $HOME/.config (XDG Base Directory Spec).
+func TestDefaultConfigPathsHonorsXDGConfigHome(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	paths := defaultConfigPaths()
+	want := filepath.Join(xdg, "ts-proxy")
+	found := false
+	for _, p := range paths {
+		if p == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("paths = %v, want entry %q from XDG_CONFIG_HOME", paths, want)
+	}
+	// Must not also inject a stale $HOME/.config/ts-proxy when XDG is set.
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		stale := filepath.Join(home, ".config", "ts-proxy")
+		if stale == want {
+			return
+		}
+		for _, p := range paths {
+			if p == stale {
+				t.Errorf("paths include hard-coded home config %q while XDG_CONFIG_HOME=%q", stale, xdg)
+			}
+		}
 	}
 }
 
