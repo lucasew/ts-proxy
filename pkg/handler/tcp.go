@@ -17,7 +17,7 @@ import (
 const DefaultTCPDialTimeout = 10 * time.Second
 
 var bufferPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		b := make([]byte, 1<<15)
 		return &b
 	},
