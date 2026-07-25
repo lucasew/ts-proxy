@@ -52,11 +52,6 @@ in
 {
   options = {
     services.ts-proxy = {
-      network-domain = lib.mkOption {
-        description = "Which ts.net domain this machine belongs";
-        default = "stargazer-shark.ts.net";
-      };
-
       environmentFile = lib.mkOption {
         description = "Path to environment file for ts-proxy credentials";
         default = "/run/secrets/ts-proxy";
