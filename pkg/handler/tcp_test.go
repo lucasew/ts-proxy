@@ -23,7 +23,7 @@ func TestHandleConnDialTimeout(t *testing.T) {
 	start := time.Now()
 	done := make(chan struct{})
 	go func() {
-		h.handleConn(context.Background(), server)
+		h.handleConn(t.Context(), server)
 		close(done)
 	}()
 
@@ -46,7 +46,7 @@ func TestHandleConnDialContextCancel(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	start := time.Now()
 	go func() {
@@ -99,7 +99,7 @@ func TestHandleConnProxiesBytes(t *testing.T) {
 	client, server := net.Pipe()
 	done := make(chan struct{})
 	go func() {
-		h.handleConn(context.Background(), server)
+		h.handleConn(t.Context(), server)
 		close(done)
 	}()
 
@@ -164,7 +164,7 @@ func TestServeHalfCloseDeliversResponse(t *testing.T) {
 		t.Fatalf("proxy listen: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	serveDone := make(chan error, 1)
 	go func() {
@@ -249,7 +249,7 @@ func TestServeClosesActiveConnsOnCancel(t *testing.T) {
 		t.Fatalf("proxy listen: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	serveDone := make(chan error, 1)
 	go func() {
 		serveDone <- h.Serve(ctx, proxyLn)
@@ -343,7 +343,7 @@ func TestServeDrainsSessionsBeforeReturn(t *testing.T) {
 		t.Fatalf("proxy listen: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	serveDone := make(chan error, 1)
 	go func() {
 		serveDone <- h.Serve(ctx, proxyLn)
