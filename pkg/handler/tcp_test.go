@@ -303,4 +303,87 @@ func TestServeClosesActiveConnsOnCancel(t *testing.T) {
 		t.Fatal("upstream accept loop did not exit")
 	}
 	upWg.Wait()
+
+	// Serve waits for handleConn (sessions WaitGroup) before returning, so
+	// every tracked connection must already be untracked.
+	h.mu.Lock()
+	left := len(h.active)
+	h.mu.Unlock()
+	if left != 0 {
+		t.Fatalf("Serve returned with %d active connections still tracked", left)
+	}
+}
+
+// TestServeDrainsSessionsBeforeReturn ensures Serve does not return while a
+// proxy session is still running. Without sessions.Wait, the accept loop
+// would exit as soon as the listener closed and the caller could tear down
+// tsnet under in-flight copies.
+func TestServeDrainsSessionsBeforeReturn(t *testing.T) {
+	upLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("upstream listen: %v", err)
+	}
+	defer upLn.Close()
+
+	// Upstream blocks in Copy until the proxy closes the connection.
+	upAccepted := make(chan struct{})
+	go func() {
+		c, err := upLn.Accept()
+		if err != nil {
+			return
+		}
+		close(upAccepted)
+		defer c.Close()
+		_, _ = io.Copy(io.Discard, c)
+	}()
+
+	h := NewTCP("tcp", upLn.Addr().String())
+	proxyLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("proxy listen: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- h.Serve(ctx, proxyLn)
+	}()
+
+	client, err := net.Dial("tcp", proxyLn.Addr().String())
+	if err != nil {
+		cancel()
+		t.Fatalf("dial proxy: %v", err)
+	}
+	defer client.Close()
+
+	if _, err := client.Write([]byte("x")); err != nil {
+		cancel()
+		t.Fatalf("write: %v", err)
+	}
+	select {
+	case <-upAccepted:
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("upstream did not accept")
+	}
+	// Session is live: both ends tracked, copies blocked on idle conns.
+	time.Sleep(50 * time.Millisecond)
+
+	cancel()
+
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after cancel")
+	}
+
+	h.mu.Lock()
+	left := len(h.active)
+	h.mu.Unlock()
+	if left != 0 {
+		t.Fatalf("after Serve return: %d active connections still tracked", left)
+	}
 }

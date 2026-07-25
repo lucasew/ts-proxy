@@ -35,6 +35,11 @@ type TCPHandler struct {
 	// peer disconnects.
 	mu     sync.Mutex
 	active map[net.Conn]struct{}
+
+	// sessions tracks in-flight handleConn goroutines. Serve waits on it
+	// after shutdown so the caller does not tear down tsnet while copies
+	// are still running.
+	sessions sync.WaitGroup
 }
 
 // NewTCP creates a handler that forwards raw TCP connections.
@@ -88,13 +93,21 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 		conn, err := ln.Accept()
 		if err != nil {
 			if ctx.Err() != nil {
+				// Listener closed for shutdown. Wait until in-flight proxy
+				// sessions finish so the caller can Close tsnet without
+				// racing still-running copy goroutines.
+				h.sessions.Wait()
 				return nil
 			}
 			tsproxy.ReportError(err, "context", "tcp accept error")
 			continue
 		}
 		slog.Info("tcp connection", "remote", conn.RemoteAddr())
-		go h.handleConn(ctx, conn)
+		h.sessions.Add(1)
+		go func() {
+			defer h.sessions.Done()
+			h.handleConn(ctx, conn)
+		}()
 	}
 }
 
