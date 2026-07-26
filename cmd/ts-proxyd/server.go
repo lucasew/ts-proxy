@@ -12,6 +12,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// cliSentinel is a stable CLI error identity for errors.Is / %w wrapping.
+type cliSentinel string
+
+func (e cliSentinel) Error() string { return string(e) }
+
+// ErrNoServersConfigured is returned when the config has no servers to run.
+const ErrNoServersConfigured cliSentinel = "no servers configured"
+
 var dryRun bool
 
 var serverCmd = &cobra.Command{
@@ -33,7 +41,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(cfg.Servers) == 0 {
-		return fmt.Errorf("no servers configured")
+		return ErrNoServersConfigured
 	}
 
 	fmt.Fprint(os.Stderr, "Configured servers:\n")
