@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -89,6 +90,9 @@ func TestStateMachineInvalidTransitions(t *testing.T) {
 			err := sm.Transition(tt.to)
 			if err == nil {
 				t.Errorf("expected error for %s -> %s, got nil", tt.from, tt.to)
+			}
+			if !errors.Is(err, ErrInvalidStateTransition) {
+				t.Errorf("errors.Is(%v, ErrInvalidStateTransition) = false", err)
 			}
 		})
 	}

@@ -17,6 +17,15 @@ const (
 	StateStopped        State = "stopped"
 )
 
+// stateSentinel is a stable state-machine error identity for errors.Is / %w.
+type stateSentinel string
+
+func (e stateSentinel) Error() string { return string(e) }
+
+// ErrInvalidStateTransition is the root cause when Transition rejects a move.
+// Call sites wrap it with fmt.Errorf %w so callers can errors.Is against it.
+const ErrInvalidStateTransition stateSentinel = "invalid state transition"
+
 var validTransitions = map[State][]State{
 	StateInit:           {StateStarting},
 	StateStarting:       {StateAuthenticating, StateRunning, StateFailed},
@@ -49,7 +58,7 @@ func (sm *StateMachine) Transition(to State) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	if !isValidTransition(sm.state, to) {
-		return fmt.Errorf("invalid state transition: %s -> %s", sm.state, to)
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidStateTransition, sm.state, to)
 	}
 	sm.state = to
 	return nil
