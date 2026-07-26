@@ -10,7 +10,7 @@ import (
 )
 
 func TestWaitRestartCompletes(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	start := time.Now()
 	if !waitRestart(ctx, 20*time.Millisecond) {
 		t.Fatal("waitRestart returned false, want true after delay")
@@ -21,7 +21,7 @@ func TestWaitRestartCompletes(t *testing.T) {
 }
 
 func TestWaitRestartCancelled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	start := time.Now()
@@ -34,7 +34,7 @@ func TestWaitRestartCancelled(t *testing.T) {
 }
 
 func TestWaitRestartCancelDuringWait(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	done := make(chan bool, 1)
