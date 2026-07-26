@@ -15,6 +15,18 @@ import (
 	"tailscale.com/tsnet"
 )
 
+// sentinel is a stable server error identity for errors.Is / %w wrapping.
+type sentinel string
+
+func (e sentinel) Error() string { return string(e) }
+
+// Sentinel errors for server lifecycle and handler setup. Call sites wrap
+// these with fmt.Errorf %w so callers can errors.Is against the root cause.
+const (
+	ErrNotStarted         sentinel = "server not started"
+	ErrUnknownHandlerType sentinel = "unknown handler type"
+)
+
 // Options for creating a Server.
 type Options struct {
 	Hostname string
@@ -106,7 +118,7 @@ func (s *Server) Start(ctx context.Context) error {
 // Serve starts all handlers. Must be called after Start.
 func (s *Server) Serve(ctx context.Context) error {
 	if s.ts == nil {
-		return fmt.Errorf("server not started")
+		return ErrNotStarted
 	}
 
 	lc, err := s.ts.LocalClient()
@@ -204,7 +216,7 @@ func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handl
 			WhoIs:           whoIs,
 		}), nil
 	default:
-		return nil, fmt.Errorf("unknown handler type: %s", hc.Type)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownHandlerType, hc.Type)
 	}
 }
 
