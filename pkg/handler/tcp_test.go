@@ -11,11 +11,20 @@ import (
 	"time"
 )
 
-// errAcceptTransient is a non-closed Accept failure used to exercise the
+// ErrAcceptTransient is a non-closed Accept failure used to exercise the
 // Serve backoff path (must not be net.ErrClosed).
-var errAcceptTransient = errors.New("accept: simulated resource limit")
+var ErrAcceptTransient = errors.New("accept: simulated resource limit")
 
-// flakyListener fails Accept with errAcceptTransient until cancel closes it
+// startServe runs h.Serve in a goroutine and returns a channel for its result.
+func startServe(ctx context.Context, h *TCPHandler, ln net.Listener) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		done <- h.Serve(ctx, ln)
+	}()
+	return done
+}
+
+// flakyListener fails Accept with ErrAcceptTransient until cancel closes it
 // via Close (returns net.ErrClosed). Used to prove Serve backs off instead of
 // spinning the accept loop.
 type flakyListener struct {
@@ -34,7 +43,7 @@ func (l *flakyListener) Accept() (net.Conn, error) {
 	case <-l.closed:
 		return nil, net.ErrClosed
 	default:
-		return nil, errAcceptTransient
+		return nil, ErrAcceptTransient
 	}
 }
 
@@ -55,11 +64,8 @@ func TestServeAcceptErrorBackoff(t *testing.T) {
 	h := NewTCP("tcp", "127.0.0.1:9")
 
 	ctx, cancel := context.WithCancel(t.Context())
-	serveDone := make(chan error, 1)
 	start := time.Now()
-	go func() {
-		serveDone <- h.Serve(ctx, ln)
-	}()
+	serveDone := startServe(ctx, h, ln)
 
 	// Let a few failed Accepts + backoffs run.
 	time.Sleep(350 * time.Millisecond)
@@ -170,7 +176,9 @@ func TestHandleConnProxiesBytes(t *testing.T) {
 		if err != nil && err != io.EOF {
 			return
 		}
-		_, _ = conn.Write([]byte("pong:" + string(buf[:n])))
+		if _, err := conn.Write([]byte("pong:" + string(buf[:n]))); err != nil {
+			return
+		}
 	}()
 
 	h := NewTCP("tcp", ln.Addr().String())
@@ -198,7 +206,9 @@ func TestHandleConnProxiesBytes(t *testing.T) {
 	if got != "pong:ping" {
 		t.Fatalf("got %q, want %q", got, "pong:ping")
 	}
-	_ = client.Close()
+	if err := client.Close(); err != nil {
+		t.Logf("client close: %v", err)
+	}
 
 	select {
 	case <-done:
@@ -235,7 +245,9 @@ func TestServeHalfCloseDeliversResponse(t *testing.T) {
 		// Small delay so a buggy first-finisher-closes-both proxy would
 		// already have torn down the client side.
 		time.Sleep(50 * time.Millisecond)
-		_, _ = c.Write([]byte("pong:" + string(req)))
+		if _, err := c.Write([]byte("pong:" + string(req))); err != nil {
+			return
+		}
 	}()
 
 	h := NewTCP("tcp", upLn.Addr().String())
@@ -246,10 +258,7 @@ func TestServeHalfCloseDeliversResponse(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	serveDone := make(chan error, 1)
-	go func() {
-		serveDone <- h.Serve(ctx, proxyLn)
-	}()
+	serveDone := startServe(ctx, h, proxyLn)
 
 	client, err := net.Dial("tcp", proxyLn.Addr().String())
 	if err != nil {
@@ -318,7 +327,9 @@ func TestServeClosesActiveConnsOnCancel(t *testing.T) {
 				defer upWg.Done()
 				defer c.Close()
 				// Hold the connection open until the peer closes.
-				_, _ = io.Copy(io.Discard, c)
+				if _, err := io.Copy(io.Discard, c); err != nil {
+					return
+				}
 			}(c)
 		}
 	}()
@@ -330,10 +341,7 @@ func TestServeClosesActiveConnsOnCancel(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	serveDone := make(chan error, 1)
-	go func() {
-		serveDone <- h.Serve(ctx, proxyLn)
-	}()
+	serveDone := startServe(ctx, h, proxyLn)
 
 	client, err := net.Dial("tcp", proxyLn.Addr().String())
 	if err != nil {
@@ -376,7 +384,9 @@ func TestServeClosesActiveConnsOnCancel(t *testing.T) {
 		t.Fatal("Serve did not return after cancel")
 	}
 
-	_ = upLn.Close()
+	if err := upLn.Close(); err != nil {
+		t.Logf("upstream listen close: %v", err)
+	}
 	select {
 	case <-upDone:
 	case <-time.After(2 * time.Second):
@@ -414,7 +424,9 @@ func TestServeDrainsSessionsBeforeReturn(t *testing.T) {
 		}
 		close(upAccepted)
 		defer c.Close()
-		_, _ = io.Copy(io.Discard, c)
+		if _, err := io.Copy(io.Discard, c); err != nil {
+			return
+		}
 	}()
 
 	h := NewTCP("tcp", upLn.Addr().String())
@@ -424,10 +436,7 @@ func TestServeDrainsSessionsBeforeReturn(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	serveDone := make(chan error, 1)
-	go func() {
-		serveDone <- h.Serve(ctx, proxyLn)
-	}()
+	serveDone := startServe(ctx, h, proxyLn)
 
 	client, err := net.Dial("tcp", proxyLn.Addr().String())
 	if err != nil {

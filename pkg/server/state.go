@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -16,6 +17,9 @@ const (
 	StateFailed         State = "failed"
 	StateStopped        State = "stopped"
 )
+
+// ErrInvalidStateTransition is returned when Transition rejects a change.
+var ErrInvalidStateTransition = errors.New("invalid state transition")
 
 var validTransitions = map[State][]State{
 	StateInit:           {StateStarting},
@@ -49,7 +53,7 @@ func (sm *StateMachine) Transition(to State) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	if !isValidTransition(sm.state, to) {
-		return fmt.Errorf("invalid state transition: %s -> %s", sm.state, to)
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidStateTransition, sm.state, to)
 	}
 	sm.state = to
 	return nil

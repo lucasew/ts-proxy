@@ -81,9 +81,11 @@ func (h *TCPHandler) closeActive() {
 	}
 	h.mu.Unlock()
 	for _, c := range conns {
-		// Close errors here are almost always "use of closed network
-		// connection" from a racing copy teardown; ignore them.
-		_ = c.Close()
+		// Close errors are almost always "use of closed network connection"
+		// from a racing copy teardown; ReportError filters those.
+		if err := c.Close(); err != nil {
+			tsproxy.ReportError(err, "context", "tcp close active conn")
+		}
 	}
 }
 
@@ -186,9 +188,13 @@ func (h *TCPHandler) handleConn(ctx context.Context, downstream net.Conn) {
 	wg.Wait()
 
 	// Full close after both directions finish (or are aborted by cancel).
-	// Errors are expected when closeActive already tore the conns down.
-	_ = downstream.Close()
-	_ = upstream.Close()
+	// ReportError filters expected closed-network errors from racing teardown.
+	if err := downstream.Close(); err != nil {
+		tsproxy.ReportError(err, "context", "downstream close error")
+	}
+	if err := upstream.Close(); err != nil {
+		tsproxy.ReportError(err, "context", "upstream close error")
+	}
 	slog.Info("tcp disconnected", "remote", downstream.RemoteAddr())
 }
 
@@ -203,11 +209,15 @@ type closeWriter interface {
 // net.Pipe in tests), fall back to a full Close so the peer unblocks.
 //
 // CloseWrite/Close errors here are almost always "use of closed network
-// connection" from a racing teardown; ignore them like closeActive does.
+// connection" from a racing teardown; ReportError filters those.
 func closeWrite(dst net.Conn) {
 	if cw, ok := dst.(closeWriter); ok {
-		_ = cw.CloseWrite()
+		if err := cw.CloseWrite(); err != nil {
+			tsproxy.ReportError(err, "context", "tcp close write")
+		}
 		return
 	}
-	_ = dst.Close()
+	if err := dst.Close(); err != nil {
+		tsproxy.ReportError(err, "context", "tcp close write fallback")
+	}
 }

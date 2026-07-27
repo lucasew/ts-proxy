@@ -96,17 +96,22 @@ func TestStateMachineInvalidTransitions(t *testing.T) {
 
 func TestStateMachineConcurrent(t *testing.T) {
 	sm := NewStateMachine()
-	sm.Transition(StateStarting)
-	sm.Transition(StateRunning)
+	if err := sm.Transition(StateStarting); err != nil {
+		t.Fatalf("Transition Starting: %v", err)
+	}
+	if err := sm.Transition(StateRunning); err != nil {
+		t.Fatalf("Transition Running: %v", err)
+	}
 
-	done := make(chan struct{})
+	done := make(chan State, 100)
 	for i := 0; i < 100; i++ {
 		go func() {
-			_ = sm.Current()
-			done <- struct{}{}
+			done <- sm.Current()
 		}()
 	}
 	for i := 0; i < 100; i++ {
-		<-done
+		if got := <-done; got != StateRunning {
+			t.Errorf("Current() = %s, want %s", got, StateRunning)
+		}
 	}
 }

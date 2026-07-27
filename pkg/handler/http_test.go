@@ -46,10 +46,19 @@ func startUpstream(t *testing.T) (addr string, got chan *http.Request, cleanup f
 			w.WriteHeader(http.StatusNoContent)
 		}),
 	}
-	go func() { _ = srv.Serve(ln) }()
+	go func() {
+		// ErrServerClosed is expected after cleanup closes the server.
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return
+		}
+	}()
 	return ln.Addr().String(), got, func() {
-		_ = srv.Close()
-		_ = ln.Close()
+		if err := srv.Close(); err != nil {
+			t.Logf("upstream Close: %v", err)
+		}
+		if err := ln.Close(); err != nil {
+			t.Logf("upstream listener Close: %v", err)
+		}
 	}
 }
 
@@ -98,6 +107,9 @@ func TestServeHTTPPeerNotFoundStillProxies(t *testing.T) {
 	}
 }
 
+// ErrLocalAPIDown is a tabled test error for unexpected WhoIs failures.
+var ErrLocalAPIDown = errors.New("localapi down")
+
 func TestServeHTTPWhoIsHardErrorIs500(t *testing.T) {
 	addr, _, cleanup := startUpstream(t)
 	defer cleanup()
@@ -106,7 +118,7 @@ func TestServeHTTPWhoIsHardErrorIs500(t *testing.T) {
 		Hostname:        "app.example.ts.net",
 		UpstreamAddress: addr,
 		WhoIs: func(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
-			return nil, errors.New("localapi down")
+			return nil, ErrLocalAPIDown
 		},
 	})
 
@@ -161,60 +173,51 @@ func TestServeHTTPSetsIdentityForTailnetUser(t *testing.T) {
 	}
 }
 
-func TestServeHTTPTaggedDeviceOmitsIdentity(t *testing.T) {
+// proxyWithWhoIs serves one GET through a handler with the given WhoIs and
+// returns the request seen by the upstream.
+func proxyWithWhoIs(t *testing.T, whoIs WhoIsFunc, remoteAddr string, spoofLogin string) *http.Request {
+	t.Helper()
 	addr, got, cleanup := startUpstream(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	h := NewHTTP(HTTPOptions{
 		Hostname:        "app.example.ts.net",
 		UpstreamAddress: addr,
-		WhoIs: func(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
-			return &apitype.WhoIsResponse{
-				UserProfile: &tailcfg.UserProfile{
-					LoginName: taggedDevicesLogin,
-				},
-			}, nil
-		},
+		WhoIs:           whoIs,
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "http://app.example.ts.net/", nil)
 	req.Host = "app.example.ts.net"
-	req.RemoteAddr = "100.64.0.3:1"
-	req.Header.Set(TailscaleUserLoginHeader, "spoofed@example.com")
+	req.RemoteAddr = remoteAddr
+	if spoofLogin != "" {
+		req.Header.Set(TailscaleUserLoginHeader, spoofLogin)
+	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
-	up := recvUpstream(t, got)
+	return recvUpstream(t, got)
+}
+
+func TestServeHTTPTaggedDeviceOmitsIdentity(t *testing.T) {
+	up := proxyWithWhoIs(t, func(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
+		return &apitype.WhoIsResponse{
+			UserProfile: &tailcfg.UserProfile{
+				LoginName: taggedDevicesLogin,
+			},
+		}, nil
+	}, "100.64.0.3:1", "spoofed@example.com")
 	if v := up.Header.Get(TailscaleUserLoginHeader); v != "" {
 		t.Errorf("Tailscale-User-Login = %q, want empty for tagged devices", v)
 	}
 }
 
 func TestServeHTTPNilUserProfileNoPanic(t *testing.T) {
-	addr, got, cleanup := startUpstream(t)
-	defer cleanup()
-
-	h := NewHTTP(HTTPOptions{
-		Hostname:        "app.example.ts.net",
-		UpstreamAddress: addr,
-		WhoIs: func(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
-			return &apitype.WhoIsResponse{UserProfile: nil}, nil
-		},
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "http://app.example.ts.net/", nil)
-	req.Host = "app.example.ts.net"
-	req.RemoteAddr = "100.64.0.4:1"
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d (nil UserProfile must not panic/500)", rec.Code, http.StatusNoContent)
-	}
-	up := recvUpstream(t, got)
+	up := proxyWithWhoIs(t, func(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error) {
+		return &apitype.WhoIsResponse{UserProfile: nil}, nil
+	}, "100.64.0.4:1", "")
 	if v := up.Header.Get(TailscaleUserLoginHeader); v != "" {
 		t.Errorf("Tailscale-User-Login = %q, want empty", v)
 	}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -57,12 +58,11 @@ func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name    string
 		modify  func(*Config)
-		wantErr string
+		wantErr error
 	}{
 		{
-			name:    "valid config",
-			modify:  func(c *Config) {},
-			wantErr: "",
+			name:   "valid config",
+			modify: func(c *Config) {},
 		},
 		{
 			name: "invalid server slug",
@@ -70,7 +70,7 @@ func TestConfigValidate(t *testing.T) {
 				c.Servers["bad-name"] = c.Servers["web"]
 				delete(c.Servers, "web")
 			},
-			wantErr: "must contain only letters, numbers, and underscores",
+			wantErr: ErrNameInvalid,
 		},
 		{
 			name: "invalid token slug",
@@ -82,7 +82,7 @@ func TestConfigValidate(t *testing.T) {
 					Handlers: c.Servers["web"].Handlers,
 				}
 			},
-			wantErr: "must contain only letters, numbers, and underscores",
+			wantErr: ErrNameInvalid,
 		},
 		{
 			name: "missing token reference",
@@ -91,7 +91,7 @@ func TestConfigValidate(t *testing.T) {
 				srv.Token = "nonexistent"
 				c.Servers["web"] = srv
 			},
-			wantErr: "undefined token",
+			wantErr: ErrUndefinedToken,
 		},
 		{
 			name: "no handlers",
@@ -100,7 +100,7 @@ func TestConfigValidate(t *testing.T) {
 				srv.Handlers = nil
 				c.Servers["web"] = srv
 			},
-			wantErr: "no handlers defined",
+			wantErr: ErrNoHandlers,
 		},
 		{
 			name: "unknown handler type",
@@ -109,7 +109,7 @@ func TestConfigValidate(t *testing.T) {
 				srv.Handlers[0].Type = "grpc"
 				c.Servers["web"] = srv
 			},
-			wantErr: "unknown type",
+			wantErr: ErrUnknownHandlerType,
 		},
 		{
 			name: "missing listen",
@@ -118,7 +118,7 @@ func TestConfigValidate(t *testing.T) {
 				srv.Handlers[0].Listen = ""
 				c.Servers["web"] = srv
 			},
-			wantErr: "listen address is required",
+			wantErr: ErrListenRequired,
 		},
 		{
 			name: "missing upstream_address",
@@ -127,7 +127,7 @@ func TestConfigValidate(t *testing.T) {
 				srv.Handlers[0].UpstreamAddress = ""
 				c.Servers["web"] = srv
 			},
-			wantErr: "upstream_address is required",
+			wantErr: ErrUpstreamRequired,
 		},
 		{
 			name: "duplicate listen address",
@@ -138,7 +138,7 @@ func TestConfigValidate(t *testing.T) {
 				})
 				c.Servers["web"] = srv
 			},
-			wantErr: "duplicate listen address",
+			wantErr: ErrDuplicateListen,
 		},
 		{
 			name: "empty token ref is allowed",
@@ -147,7 +147,6 @@ func TestConfigValidate(t *testing.T) {
 				srv.Token = ""
 				c.Servers["web"] = srv
 			},
-			wantErr: "",
 		},
 	}
 
@@ -156,16 +155,18 @@ func TestConfigValidate(t *testing.T) {
 			cfg := validConfig()
 			tt.modify(&cfg)
 			err := cfg.Validate()
-			if tt.wantErr == "" {
+			if tt.wantErr == nil {
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-			} else {
-				if err == nil {
-					t.Errorf("expected error containing %q, got nil", tt.wantErr)
-				} else if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Errorf("expected error containing %q, got %q", tt.wantErr, err.Error())
-				}
+				return
+			}
+			if err == nil {
+				t.Errorf("expected %v, got nil", tt.wantErr)
+				return
+			}
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("expected errors.Is(..., %v), got %v", tt.wantErr, err)
 			}
 		})
 	}
@@ -272,8 +273,8 @@ func TestTCPHandlerNoListenDefault(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error for TCP handler without listen")
 	}
-	if !strings.Contains(err.Error(), "listen address is required") {
-		t.Errorf("expected 'listen address is required', got %q", err.Error())
+	if !errors.Is(err, ErrListenRequired) {
+		t.Errorf("expected ErrListenRequired, got %v", err)
 	}
 }
 
@@ -292,10 +293,15 @@ func TestExpandEnvUnset(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when auth_key references an unset environment variable")
 	}
-	if !strings.Contains(err.Error(), "DEFINITELY_NOT_SET_12345") {
+	if !errors.Is(err, ErrUndefinedEnvVar) {
+		t.Errorf("expected ErrUndefinedEnvVar, got: %v", err)
+	}
+	// Diagnostic context (field path + var name) stays in the message.
+	msg := err.Error()
+	if !strings.Contains(msg, "DEFINITELY_NOT_SET_12345") {
 		t.Errorf("error should mention the missing variable name, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "token \"default\"") {
+	if !strings.Contains(msg, "token \"default\"") {
 		t.Errorf("error should mention the token name, got: %v", err)
 	}
 }

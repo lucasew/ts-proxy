@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"github.com/lucasew/ts-proxy/pkg/server"
 	"github.com/spf13/cobra"
 )
+
+// ErrNoServers is returned when the config has no servers to run.
+var ErrNoServers = errors.New("no servers configured")
 
 var dryRun bool
 
@@ -33,7 +37,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(cfg.Servers) == 0 {
-		return fmt.Errorf("no servers configured")
+		return ErrNoServers
 	}
 
 	fmt.Fprint(os.Stderr, "Configured servers:\n")

@@ -11,11 +11,25 @@ import (
 	"testing"
 )
 
-func TestReportErrorSkipsNil(t *testing.T) {
+// Tabled test errors (prefer Err* over inline errors.New).
+var (
+	ErrWrap  = errors.New("wrap")
+	ErrBoom  = errors.New("boom")
+	ErrOther = errors.New("other")
+)
+
+// captureErrorLog installs a text handler on slog.Default and restores it.
+func captureErrorLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestReportErrorSkipsNil(t *testing.T) {
+	buf := captureErrorLog(t)
 
 	ReportError(nil, "context", "should not log")
 	if buf.Len() != 0 {
@@ -24,17 +38,14 @@ func TestReportErrorSkipsNil(t *testing.T) {
 }
 
 func TestReportErrorSkipsExpected(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	buf := captureErrorLog(t)
 
 	cases := []error{
 		context.Canceled,
 		net.ErrClosed,
 		// Wrapped forms (fmt.Errorf / errors.Join) still match via errors.Is.
 		errors.Join(io.EOF, net.ErrClosed),
-		errors.Join(errors.New("wrap"), context.Canceled),
+		errors.Join(ErrWrap, context.Canceled),
 	}
 
 	for _, err := range cases {
@@ -47,10 +58,7 @@ func TestReportErrorSkipsExpected(t *testing.T) {
 }
 
 func TestReportErrorLogsUnexpected(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	buf := captureErrorLog(t)
 
 	// DeadlineExceeded must still be reported (e.g. dial timeout).
 	ReportError(context.DeadlineExceeded, "context", "tcp dial upstream")
@@ -63,7 +71,7 @@ func TestReportErrorLogsUnexpected(t *testing.T) {
 	}
 
 	buf.Reset()
-	ReportError(errors.New("boom"), "context", "server failed")
+	ReportError(ErrBoom, "context", "server failed")
 	if !strings.Contains(buf.String(), "boom") {
 		t.Fatalf("expected boom in log, got %q", buf.String())
 	}
@@ -79,7 +87,7 @@ func TestIsExpectedError(t *testing.T) {
 	if isExpectedError(context.DeadlineExceeded) {
 		t.Error("DeadlineExceeded should not be expected")
 	}
-	if isExpectedError(errors.New("other")) {
+	if isExpectedError(ErrOther) {
 		t.Error("generic error should not be expected")
 	}
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -13,6 +14,12 @@ import (
 	"golang.org/x/sync/errgroup"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/tsnet"
+)
+
+// Sentinel errors for Server lifecycle.
+var (
+	ErrNotStarted         = errors.New("server not started")
+	ErrUnknownHandlerType = errors.New("unknown handler type")
 )
 
 // Options for creating a Server.
@@ -106,7 +113,7 @@ func (s *Server) Start(ctx context.Context) error {
 // Serve starts all handlers. Must be called after Start.
 func (s *Server) Serve(ctx context.Context) error {
 	if s.ts == nil {
-		return fmt.Errorf("server not started")
+		return ErrNotStarted
 	}
 
 	lc, err := s.ts.LocalClient()
@@ -136,11 +143,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("listen %s: %w", hc.Listen, err)
 			}
-			defer func() {
-				if cerr := ln.Close(); cerr != nil {
-					tsproxy.ReportError(cerr, "context", "listener close error")
-				}
-			}()
+			defer func() { reportClose(ln.Close(), "listener close error") }()
 
 			slog.Info("handler listening",
 				"server", s.name,
@@ -161,16 +164,20 @@ func (s *Server) Serve(ctx context.Context) error {
 	return err
 }
 
+// reportClose funnels Close errors through ReportError (which filters expected
+// net.ErrClosed / context cancel noise).
+func reportClose(err error, msg string) {
+	if err != nil {
+		tsproxy.ReportError(err, "context", msg)
+	}
+}
+
 // Run performs the full lifecycle: start, serve, close.
 func (s *Server) Run(ctx context.Context) error {
 	if err := s.Start(ctx); err != nil {
 		return err
 	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			tsproxy.ReportError(err, "context", "server close error")
-		}
-	}()
+	defer func() { reportClose(s.Close(), "server close error") }()
 	return s.Serve(ctx)
 }
 
@@ -204,7 +211,7 @@ func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handl
 			WhoIs:           whoIs,
 		}), nil
 	default:
-		return nil, fmt.Errorf("unknown handler type: %s", hc.Type)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownHandlerType, hc.Type)
 	}
 }
 
