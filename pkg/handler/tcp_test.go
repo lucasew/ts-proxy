@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -92,6 +95,49 @@ func TestServeAcceptErrorBackoff(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("Serve shutdown took %v, want prompt cancel", elapsed)
+	}
+}
+
+// TestServeAcceptErrorLogRateLimit ensures permanent Accept failures do not
+// log at the retry rate. First failure logs; further failures within the
+// interval are silent so a stuck Accept path cannot flood slog.
+func TestServeAcceptErrorLogRateLimit(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ln := newFlakyListener()
+	h := NewTCP("tcp", "127.0.0.1:9")
+	// Interval longer than the observation window so only the first failure logs.
+	h.acceptErrorLogEvery = time.Hour
+
+	ctx, cancel := context.WithCancel(t.Context())
+	serveDone := startServe(ctx, h, ln)
+
+	// Several Accept failures + backoffs (100ms each); more than one log
+	// would mean rate limiting is not applied.
+	time.Sleep(350 * time.Millisecond)
+	n := ln.accepts.Load()
+	if n < 2 {
+		cancel()
+		t.Fatalf("Accept calls = %d, want multiple failures to exercise rate limit", n)
+	}
+
+	cancel()
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after cancel")
+	}
+
+	out := buf.String()
+	count := strings.Count(out, "tcp accept error")
+	if count != 1 {
+		t.Fatalf("logged %d accept errors, want 1 (rate-limited); log=%q", count, out)
 	}
 }
 
