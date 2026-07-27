@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -32,9 +34,16 @@ func TestReportErrorSkipsExpected(t *testing.T) {
 	cases := []error{
 		context.Canceled,
 		net.ErrClosed,
-		// Wrapped forms (fmt.Errorf / errors.Join) still match via errors.Is.
+		io.EOF,
+		io.ErrClosedPipe,
+		syscall.ECONNRESET,
+		syscall.EPIPE,
+		syscall.ECONNABORTED,
+		// Wrapped forms (fmt.Errorf / errors.Join / net.OpError) still match via errors.Is.
 		errors.Join(io.EOF, net.ErrClosed),
 		errors.Join(errors.New("wrap"), context.Canceled),
+		&net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET},
+		fmt.Errorf("copy: %w", syscall.EPIPE),
 	}
 
 	for _, err := range cases {
@@ -75,6 +84,21 @@ func TestIsExpectedError(t *testing.T) {
 	}
 	if !isExpectedError(net.ErrClosed) {
 		t.Error("ErrClosed should be expected")
+	}
+	if !isExpectedError(io.EOF) {
+		t.Error("EOF should be expected (clean peer close)")
+	}
+	if !isExpectedError(io.ErrClosedPipe) {
+		t.Error("ErrClosedPipe should be expected")
+	}
+	if !isExpectedError(syscall.ECONNRESET) {
+		t.Error("ECONNRESET should be expected")
+	}
+	if !isExpectedError(syscall.EPIPE) {
+		t.Error("EPIPE should be expected")
+	}
+	if !isExpectedError(syscall.ECONNABORTED) {
+		t.Error("ECONNABORTED should be expected")
 	}
 	if isExpectedError(context.DeadlineExceeded) {
 		t.Error("DeadlineExceeded should not be expected")
