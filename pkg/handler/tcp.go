@@ -23,6 +23,11 @@ const DefaultTCPDialTimeout = 10 * time.Second
 // context is still live.
 const acceptRetryDelay = 100 * time.Millisecond
 
+// acceptErrorLogInterval is the minimum time between "tcp accept error"
+// ReportError calls while Accept keeps failing. Without this, a permanent
+// Accept failure would log at acceptRetryDelay (10/s) and drown real signals.
+const acceptErrorLogInterval = 5 * time.Second
+
 var bufferPool = sync.Pool{
 	New: func() any {
 		b := make([]byte, 1<<15)
@@ -36,6 +41,11 @@ type TCPHandler struct {
 	upstreamAddress string
 	dialTimeout     time.Duration
 
+	// acceptErrorLogEvery is how often permanent Accept failures may be
+	// logged. Zero means acceptErrorLogInterval. Tests may set a short
+	// value to observe rate limiting without multi-second waits.
+	acceptErrorLogEvery time.Duration
+
 	// active holds connections opened by this handler so Serve can close
 	// them when the parent context is cancelled. Without this, cancelling
 	// only closes the listener and in-flight proxy sessions hang until the
@@ -47,6 +57,10 @@ type TCPHandler struct {
 	// after shutdown so the caller does not tear down tsnet while copies
 	// are still running.
 	sessions sync.WaitGroup
+
+	// lastAcceptErrorLog is the last time a non-closed Accept error was
+	// reported. Guarded by the Serve loop (single goroutine).
+	lastAcceptErrorLog time.Time
 }
 
 // NewTCP creates a handler that forwards raw TCP connections.
@@ -108,7 +122,17 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 				h.sessions.Wait()
 				return nil
 			}
-			tsproxy.ReportError(err, "context", "tcp accept error")
+			// Rate-limit: first failure always logs; further failures while
+			// Accept stays broken log at most once per interval.
+			interval := h.acceptErrorLogEvery
+			if interval <= 0 {
+				interval = acceptErrorLogInterval
+			}
+			now := time.Now()
+			if h.lastAcceptErrorLog.IsZero() || now.Sub(h.lastAcceptErrorLog) >= interval {
+				tsproxy.ReportError(err, "context", "tcp accept error")
+				h.lastAcceptErrorLog = now
+			}
 			// Back off so a stuck Accept path cannot busy-loop the core.
 			// If cancel arrives during the wait, shut down cleanly.
 			timer := time.NewTimer(acceptRetryDelay)
@@ -126,6 +150,8 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 			}
 			continue
 		}
+		// Successful accept: allow the next failure to log immediately.
+		h.lastAcceptErrorLog = time.Time{}
 		slog.Info("tcp connection", "remote", conn.RemoteAddr())
 		h.sessions.Add(1)
 		go func() {
