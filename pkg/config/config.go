@@ -11,6 +11,25 @@ import (
 
 var slugPattern = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
+// sentinel is a stable config error identity for errors.Is / %w wrapping.
+type sentinel string
+
+func (e sentinel) Error() string { return string(e) }
+
+// Sentinel errors for config validation and env expansion. Call sites wrap
+// these with fmt.Errorf %w so callers can errors.Is against the root cause.
+const (
+	ErrEmptyName        sentinel = "name cannot be empty"
+	ErrInvalidSlug      sentinel = "must contain only letters, numbers, and underscores"
+	ErrUndefinedEnv     sentinel = "references undefined environment variable(s)"
+	ErrUndefinedToken   sentinel = "references undefined token"
+	ErrNoHandlers       sentinel = "no handlers defined"
+	ErrUnknownType      sentinel = "unknown type"
+	ErrListenRequired   sentinel = "listen address is required"
+	ErrUpstreamRequired sentinel = "upstream_address is required"
+	ErrDuplicateListen  sentinel = "duplicate listen address"
+)
+
 // Config is the top-level configuration for ts-proxy.
 type Config struct {
 	StateDir   string                  `mapstructure:"state_dir" yaml:"state_dir"`
@@ -45,10 +64,10 @@ type HandlerConfig struct {
 // ValidateSlug checks that a name contains only letters, numbers, and underscores.
 func ValidateSlug(slug string) error {
 	if slug == "" {
-		return fmt.Errorf("name cannot be empty")
+		return ErrEmptyName
 	}
 	if !slugPattern.MatchString(slug) {
-		return fmt.Errorf("name %q is invalid: must contain only letters, numbers, and underscores", slug)
+		return fmt.Errorf("name %q is invalid: %w", slug, ErrInvalidSlug)
 	}
 	return nil
 }
@@ -131,8 +150,8 @@ func (c *Config) ExpandEnv() error {
 		})
 
 		if len(missing) > 0 {
-			return expanded, fmt.Errorf("%s references undefined environment variable(s): %s (original: %q)",
-				context, strings.Join(missing, ", "), original)
+			return expanded, fmt.Errorf("%s %w: %s (original: %q)",
+				context, ErrUndefinedEnv, strings.Join(missing, ", "), original)
 		}
 		return expanded, nil
 	}
@@ -200,28 +219,28 @@ func (c *Config) Validate() error {
 		}
 		if srv.Token != "" {
 			if _, ok := c.Tokens[srv.Token]; !ok {
-				return fmt.Errorf("server %q: references undefined token %q", name, srv.Token)
+				return fmt.Errorf("server %q: %w %q", name, ErrUndefinedToken, srv.Token)
 			}
 		}
 		if len(srv.Handlers) == 0 {
-			return fmt.Errorf("server %q: no handlers defined", name)
+			return fmt.Errorf("server %q: %w", name, ErrNoHandlers)
 		}
 		seen := make(map[string]bool)
 		for i, h := range srv.Handlers {
 			switch h.Type {
 			case "tcp", "http":
 			default:
-				return fmt.Errorf("server %q: handler[%d]: unknown type %q", name, i, h.Type)
+				return fmt.Errorf("server %q: handler[%d]: %w %q", name, i, ErrUnknownType, h.Type)
 			}
 			if h.Listen == "" {
-				return fmt.Errorf("server %q: handler[%d]: listen address is required", name, i)
+				return fmt.Errorf("server %q: handler[%d]: %w", name, i, ErrListenRequired)
 			}
 			if h.UpstreamAddress == "" {
-				return fmt.Errorf("server %q: handler[%d]: upstream_address is required", name, i)
+				return fmt.Errorf("server %q: handler[%d]: %w", name, i, ErrUpstreamRequired)
 			}
 			key := h.Listen
 			if seen[key] {
-				return fmt.Errorf("server %q: handler[%d]: duplicate listen address %q", name, i, h.Listen)
+				return fmt.Errorf("server %q: handler[%d]: %w %q", name, i, ErrDuplicateListen, h.Listen)
 			}
 			seen[key] = true
 		}
