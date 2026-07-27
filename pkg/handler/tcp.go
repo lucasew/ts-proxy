@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -15,6 +16,12 @@ import (
 // before giving up. Unlimited dials can pin a goroutine forever against a
 // blackholed or slow peer.
 const DefaultTCPDialTimeout = 10 * time.Second
+
+// acceptRetryDelay is how long Serve backs off after an Accept error that is
+// not explained by context cancel / listener close. Retrying immediately can
+// pin a CPU core when Accept fails permanently (e.g. EMFILE) while the parent
+// context is still live.
+const acceptRetryDelay = 100 * time.Millisecond
 
 var bufferPool = sync.Pool{
 	New: func() any {
@@ -92,7 +99,7 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if ctx.Err() != nil {
+			if ctx.Err() != nil || isListenerClosed(err) {
 				// Listener closed for shutdown. Wait until in-flight proxy
 				// sessions finish so the caller can Close tsnet without
 				// racing still-running copy goroutines.
@@ -100,6 +107,21 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 				return nil
 			}
 			tsproxy.ReportError(err, "context", "tcp accept error")
+			// Back off so a stuck Accept path cannot busy-loop the core.
+			// If cancel arrives during the wait, shut down cleanly.
+			timer := time.NewTimer(acceptRetryDelay)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				h.sessions.Wait()
+				return nil
+			case <-timer.C:
+			}
 			continue
 		}
 		slog.Info("tcp connection", "remote", conn.RemoteAddr())
@@ -109,6 +131,12 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 			h.handleConn(ctx, conn)
 		}()
 	}
+}
+
+// isListenerClosed reports whether err means the listener was closed (normal
+// shutdown race: Accept fails before the Serve loop observes ctx cancel).
+func isListenerClosed(err error) bool {
+	return errors.Is(err, net.ErrClosed)
 }
 
 func (h *TCPHandler) handleConn(ctx context.Context, downstream net.Conn) {

@@ -2,12 +2,92 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+// errAcceptTransient is a non-closed Accept failure used to exercise the
+// Serve backoff path (must not be net.ErrClosed).
+var errAcceptTransient = errors.New("accept: simulated resource limit")
+
+// flakyListener fails Accept with errAcceptTransient until cancel closes it
+// via Close (returns net.ErrClosed). Used to prove Serve backs off instead of
+// spinning the accept loop.
+type flakyListener struct {
+	accepts atomic.Int64
+	closed  chan struct{}
+	once    sync.Once
+}
+
+func newFlakyListener() *flakyListener {
+	return &flakyListener{closed: make(chan struct{})}
+}
+
+func (l *flakyListener) Accept() (net.Conn, error) {
+	l.accepts.Add(1)
+	select {
+	case <-l.closed:
+		return nil, net.ErrClosed
+	default:
+		return nil, errAcceptTransient
+	}
+}
+
+func (l *flakyListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+
+func (l *flakyListener) Addr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+}
+
+// TestServeAcceptErrorBackoff ensures a permanent Accept failure does not
+// busy-loop: Accept should fire roughly once per acceptRetryDelay, and cancel
+// during the backoff must return promptly.
+func TestServeAcceptErrorBackoff(t *testing.T) {
+	ln := newFlakyListener()
+	h := NewTCP("tcp", "127.0.0.1:9")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	serveDone := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		serveDone <- h.Serve(ctx, ln)
+	}()
+
+	// Let a few failed Accepts + backoffs run.
+	time.Sleep(350 * time.Millisecond)
+	n := ln.accepts.Load()
+	// Without backoff, 350ms would produce thousands of Accepts. With 100ms
+	// delay, expect a small handful (startup + a few retries).
+	if n < 2 {
+		cancel()
+		t.Fatalf("Accept calls = %d, want at least 2 failures before cancel", n)
+	}
+	if n > 20 {
+		cancel()
+		t.Fatalf("Accept calls = %d in 350ms, want backoff (~%v); loop looks busy", n, acceptRetryDelay)
+	}
+
+	cancel()
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after cancel during accept backoff")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Serve shutdown took %v, want prompt cancel", elapsed)
+	}
+}
 
 // TestHandleConnDialTimeout ensures a blackholed upstream cannot pin handleConn
 // forever. 192.0.2.0/24 is TEST-NET-1 (RFC 5737) and is not routed on the public
