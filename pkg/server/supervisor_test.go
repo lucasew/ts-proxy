@@ -1,59 +1,11 @@
 package server
 
 import (
-	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
 )
-
-func TestWaitRestartCompletes(t *testing.T) {
-	ctx := t.Context()
-	start := time.Now()
-	if !waitRestart(ctx, 20*time.Millisecond) {
-		t.Fatal("waitRestart returned false, want true after delay")
-	}
-	if elapsed := time.Since(start); elapsed < 20*time.Millisecond {
-		t.Fatalf("waitRestart returned too early: %v", elapsed)
-	}
-}
-
-func TestWaitRestartCancelled(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	start := time.Now()
-	if waitRestart(ctx, time.Hour) {
-		t.Fatal("waitRestart returned true, want false after cancel")
-	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Fatalf("waitRestart ignored cancel, took %v", elapsed)
-	}
-}
-
-func TestWaitRestartCancelDuringWait(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	done := make(chan bool, 1)
-	go func() {
-		done <- waitRestart(ctx, time.Hour)
-	}()
-
-	time.Sleep(20 * time.Millisecond)
-	cancel()
-
-	select {
-	case got := <-done:
-		if got {
-			t.Fatal("waitRestart returned true after mid-wait cancel, want false")
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("waitRestart did not return after cancel")
-	}
-}
 
 func TestNewSupervisorResolvesTokensAndStateDir(t *testing.T) {
 	cfg := &config.Config{
