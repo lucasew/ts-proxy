@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucasew/ts-proxy/internal/ctxwait"
 	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 )
 
@@ -135,18 +136,9 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 			}
 			// Back off so a stuck Accept path cannot busy-loop the core.
 			// If cancel arrives during the wait, shut down cleanly.
-			timer := time.NewTimer(acceptRetryDelay)
-			select {
-			case <-ctx.Done():
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
+			if !ctxwait.Delay(ctx, acceptRetryDelay) {
 				h.sessions.Wait()
 				return nil
-			case <-timer.C:
 			}
 			continue
 		}
