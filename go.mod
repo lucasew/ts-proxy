@@ -6,7 +6,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.16.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.102.0
+	tailscale.com v1.102.1
 )
 
 require (
