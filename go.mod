@@ -1,12 +1,12 @@
 module github.com/lucasew/ts-proxy
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.16.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.102.2
+	tailscale.com v1.102.3
 )
 
 require (
