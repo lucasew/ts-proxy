@@ -34,12 +34,6 @@ const (
 	SchemeHTTPS = "https"
 )
 
-// DefaultHTTPDialTimeout is how long the reverse proxy waits when dialing
-// upstream before giving up. Unlimited dials can pin a request goroutine
-// forever against a blackholed or slow peer (same class of bug as
-// DefaultTCPDialTimeout).
-const DefaultHTTPDialTimeout = 10 * time.Second
-
 // HTTPOptions configures an HTTP reverse proxy handler.
 type HTTPOptions struct {
 	Hostname        string
@@ -72,11 +66,7 @@ func NewHTTP(opts HTTPOptions) *HTTPHandler {
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.Transport = &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			timeout := h.dialTimeout
-			if timeout <= 0 {
-				timeout = DefaultHTTPDialTimeout
-			}
-			d := net.Dialer{Timeout: timeout}
+			d := upstreamDialer(h.dialTimeout)
 			return d.DialContext(ctx, opts.UpstreamNetwork, opts.UpstreamAddress)
 		},
 	}
