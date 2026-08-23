@@ -13,11 +13,6 @@ import (
 	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 )
 
-// DefaultTCPDialTimeout is how long handleConn waits when dialing upstream
-// before giving up. Unlimited dials can pin a goroutine forever against a
-// blackholed or slow peer.
-const DefaultTCPDialTimeout = 10 * time.Second
-
 // acceptRetryDelay is how long Serve backs off after an Accept error that is
 // not explained by context cancel / listener close. Retrying immediately can
 // pin a CPU core when Accept fails permanently (e.g. EMFILE) while the parent
@@ -163,11 +158,7 @@ func (h *TCPHandler) handleConn(ctx context.Context, downstream net.Conn) {
 	h.track(downstream)
 	defer h.untrack(downstream)
 
-	timeout := h.dialTimeout
-	if timeout <= 0 {
-		timeout = DefaultTCPDialTimeout
-	}
-	d := net.Dialer{Timeout: timeout}
+	d := upstreamDialer(h.dialTimeout)
 	upstream, err := d.DialContext(ctx, h.upstreamNetwork, h.upstreamAddress)
 	if err != nil {
 		// Cancel during shutdown is expected; real dial failures are not.
