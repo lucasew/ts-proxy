@@ -406,6 +406,27 @@ func TestDisplayStringFlags(t *testing.T) {
 	}
 }
 
+func TestFormatHandlerSectionsAlignsColumns(t *testing.T) {
+	got := FormatHandlerSections([]HandlerSection{
+		{Header: "web\n", Handlers: []HandlerConfig{
+			{Type: "http", Listen: ":80", UpstreamAddress: "localhost:8080"},
+		}},
+		{Header: "api\n", Handlers: []HandlerConfig{
+			{Type: "http", Listen: ":8443", UpstreamAddress: "localhost:3000", TLS: true},
+		}},
+	})
+	// Widths are global: ":80" pads to len(":8443"), "HTTP" pads to len("HTTP+TLS").
+	if !strings.Contains(got, "  :80   HTTP     -> localhost:8080") {
+		t.Fatalf("short listen not padded to global width:\n%s", got)
+	}
+	if !strings.Contains(got, "  :8443 HTTP+TLS -> localhost:3000") {
+		t.Fatalf("missing second handler line:\n%s", got)
+	}
+	if !strings.HasPrefix(got, "web\n") || !strings.Contains(got, "api\n") {
+		t.Fatalf("missing section headers:\n%s", got)
+	}
+}
+
 func TestServerNames(t *testing.T) {
 	cfg := Config{
 		Servers: map[string]ServerConfig{
