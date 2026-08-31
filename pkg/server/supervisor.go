@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -84,22 +83,15 @@ func (s *Supervisor) CloseAll() {
 
 // DisplayAuthenticated prints server info including FQDN (after authentication).
 func (s *Supervisor) DisplayAuthenticated() string {
-	var b strings.Builder
-
-	var all []config.HandlerConfig
-	for _, srv := range s.servers {
-		all = append(all, s.cfg.Servers[srv.Name()].Handlers...)
-	}
-	maxListen, maxTypeFlags := config.HandlerColumnWidths(all)
-
+	sections := make([]config.HandlerSection, 0, len(s.servers))
 	for _, srv := range s.servers {
 		scfg := s.cfg.Servers[srv.Name()]
-		fmt.Fprintf(&b, "%s (%s)\n", srv.Name(), srv.FQDN())
-		for _, h := range scfg.Handlers {
-			b.WriteString(config.FormatHandlerLine(h, maxListen, maxTypeFlags))
-		}
+		sections = append(sections, config.HandlerSection{
+			Header:   fmt.Sprintf("%s (%s)\n", srv.Name(), srv.FQDN()),
+			Handlers: scfg.Handlers,
+		})
 	}
-	return b.String()
+	return config.FormatHandlerSections(sections)
 }
 
 // Run starts all servers and supervises them.

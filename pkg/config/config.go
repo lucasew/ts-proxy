@@ -256,8 +256,8 @@ func (c *Config) ServerNames() []string {
 	return names
 }
 
-// HandlerTypeFlags returns a display label like "HTTP", "HTTP+TLS", or "TCP+Funnel".
-func HandlerTypeFlags(h HandlerConfig) string {
+// handlerTypeFlags returns a display label like "HTTP", "HTTP+TLS", or "TCP+Funnel".
+func handlerTypeFlags(h HandlerConfig) string {
 	var flagParts []string
 	if h.TLS {
 		flagParts = append(flagParts, "TLS")
@@ -272,49 +272,68 @@ func HandlerTypeFlags(h HandlerConfig) string {
 	return typeFlags
 }
 
-// HandlerColumnWidths returns max widths for listen and type/flags columns
+// handlerColumnWidths returns max widths for listen and type/flags columns
 // across the given handlers, for aligned multi-server display.
-func HandlerColumnWidths(handlers []HandlerConfig) (maxListen, maxTypeFlags int) {
+func handlerColumnWidths(handlers []HandlerConfig) (maxListen, maxTypeFlags int) {
 	for _, h := range handlers {
 		if len(h.Listen) > maxListen {
 			maxListen = len(h.Listen)
 		}
-		if n := len(HandlerTypeFlags(h)); n > maxTypeFlags {
+		if n := len(handlerTypeFlags(h)); n > maxTypeFlags {
 			maxTypeFlags = n
 		}
 	}
 	return maxListen, maxTypeFlags
 }
 
-// FormatHandlerLine returns one indented handler line for DisplayString-style output.
-func FormatHandlerLine(h HandlerConfig, maxListen, maxTypeFlags int) string {
+// formatHandlerLine returns one indented handler line for DisplayString-style output.
+func formatHandlerLine(h HandlerConfig, maxListen, maxTypeFlags int) string {
 	return fmt.Sprintf("  %-*s %-*s -> %s\n",
 		maxListen, h.Listen,
-		maxTypeFlags, HandlerTypeFlags(h),
+		maxTypeFlags, handlerTypeFlags(h),
 		h.UpstreamAddress)
+}
+
+// HandlerSection is one named block in DisplayString-style output.
+type HandlerSection struct {
+	Header   string
+	Handlers []HandlerConfig
+}
+
+// FormatHandlerSections renders handler tables under each section header.
+// Column widths are computed across all sections so multi-server output lines up.
+func FormatHandlerSections(sections []HandlerSection) string {
+	var all []HandlerConfig
+	for _, s := range sections {
+		all = append(all, s.Handlers...)
+	}
+	maxListen, maxTypeFlags := handlerColumnWidths(all)
+
+	var b strings.Builder
+	for _, s := range sections {
+		b.WriteString(s.Header)
+		for _, h := range s.Handlers {
+			b.WriteString(formatHandlerLine(h, maxListen, maxTypeFlags))
+		}
+	}
+	return b.String()
 }
 
 // DisplayString returns a human-readable representation of configured servers.
 func (c *Config) DisplayString() string {
-	var b strings.Builder
-
-	// Compute global max widths for handler columns so all sections align vertically
-	var all []HandlerConfig
-	for _, name := range c.ServerNames() {
-		all = append(all, c.Servers[name].Handlers...)
-	}
-	maxListen, maxTypeFlags := HandlerColumnWidths(all)
-
-	for _, name := range c.ServerNames() {
+	names := c.ServerNames()
+	sections := make([]HandlerSection, 0, len(names))
+	for _, name := range names {
 		srv := c.Servers[name]
-		fmt.Fprintf(&b, "%s (hostname: %s)", name, srv.Hostname)
+		header := fmt.Sprintf("%s (hostname: %s)", name, srv.Hostname)
 		if srv.Token != "" {
-			fmt.Fprintf(&b, " [token: %s]", srv.Token)
+			header += fmt.Sprintf(" [token: %s]", srv.Token)
 		}
-		b.WriteString("\n")
-		for _, h := range srv.Handlers {
-			b.WriteString(FormatHandlerLine(h, maxListen, maxTypeFlags))
-		}
+		header += "\n"
+		sections = append(sections, HandlerSection{
+			Header:   header,
+			Handlers: srv.Handlers,
+		})
 	}
-	return b.String()
+	return FormatHandlerSections(sections)
 }
