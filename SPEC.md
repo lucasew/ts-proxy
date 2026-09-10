@@ -95,7 +95,7 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 
 ## Success
 
-- `forward: 127.0.0.2` on hostname `booba` makes `booba.<tailnet>:22` reach `127.0.0.2:22` over TCP.
+- `forward: 127.0.0.2` on hostname `gremio` makes `gremio.<tailnet>:22` reach `127.0.0.2:22` over TCP.
 - The same server with a handler on `:80` still serves that handler on port 80.
 - Omitting `forward` leaves unmatched ports closed.
 - `ts-proxyd config` prints the resolved `forward` value.

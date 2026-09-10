@@ -75,7 +75,7 @@ func TestFallbackTCPSplicesDestPort(t *testing.T) {
 	}()
 
 	h := handler.NewTCP("tcp", "")
-	cb := forwardFallback{ctx: t.Context(), name: "booba", host: host, h: h}.handle
+	cb := forwardFallback{ctx: t.Context(), name: "gremio", host: host, h: h}.handle
 	src := netip.MustParseAddrPort("100.64.0.2:4242")
 	dst := netip.AddrPortFrom(netip.MustParseAddr("100.64.0.1"), port)
 	serve, intercept := cb(src, dst)
