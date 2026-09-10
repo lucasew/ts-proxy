@@ -27,6 +27,7 @@ type Options struct {
 	Hostname string
 	StateDir string
 	AuthKey  string
+	Forward  string
 	Handlers []config.HandlerConfig
 }
 
@@ -130,8 +131,23 @@ func (s *Server) Serve(ctx context.Context) error {
 	s.mustTransition(StateRunning)
 
 	g, gCtx := errgroup.WithContext(ctx)
+
+	if s.opts.Forward != "" {
+		fwd := handler.NewTCP("tcp", s.opts.Forward)
+		unreg := s.ts.RegisterFallbackTCPHandler(forwardFallback{
+			ctx:  gCtx,
+			name: s.name,
+			host: s.opts.Forward,
+			h:    fwd,
+		}.handle)
+		defer unreg()
+		defer fwd.Shutdown()
+		slog.Info("forward fallback", "server", s.name, "target", s.opts.Forward)
+	} else if len(s.opts.Handlers) == 0 {
+		slog.Warn("no handlers and no forward; rejecting all connections", "server", s.name)
+	}
+
 	for _, hc := range s.opts.Handlers {
-		hc := hc
 		g.Go(func() error {
 			h, err := s.createHandler(hc, fqdn, whoIs)
 			if err != nil {
@@ -152,6 +168,14 @@ func (s *Server) Serve(ctx context.Context) error {
 				"upstream", hc.UpstreamAddress,
 			)
 			return h.Serve(gCtx, ln)
+		})
+	}
+	if len(s.opts.Handlers) == 0 {
+		// No listeners: stay up so the node remains on the tailnet
+		// (forward fallback, or an empty server that rejects everything).
+		g.Go(func() error {
+			<-gCtx.Done()
+			return nil
 		})
 	}
 

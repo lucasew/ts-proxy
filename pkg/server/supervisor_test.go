@@ -50,6 +50,30 @@ func TestNewSupervisorResolvesTokensAndStateDir(t *testing.T) {
 	}
 }
 
+func TestNewSupervisorPassesForward(t *testing.T) {
+	cfg := &config.Config{
+		StateDir: "/var/lib/ts-proxy",
+		Servers: map[string]config.ServerConfig{
+			"booba": {
+				Hostname: "booba",
+				Forward:  "127.0.0.2",
+			},
+		},
+	}
+	sup := NewSupervisor(cfg)
+	servers := sup.Servers()
+	if len(servers) != 1 {
+		t.Fatalf("Servers() len = %d, want 1", len(servers))
+	}
+	if servers[0].opts.Forward != "127.0.0.2" {
+		t.Fatalf("Forward = %q, want 127.0.0.2", servers[0].opts.Forward)
+	}
+	out := sup.DisplayAuthenticated()
+	if !strings.Contains(out, "[forward: 127.0.0.2]") {
+		t.Fatalf("DisplayAuthenticated missing forward: %q", out)
+	}
+}
+
 func TestDisplayAuthenticatedUsesFQDNFallback(t *testing.T) {
 	cfg := &config.Config{
 		StateDir: "/tmp/ts-proxy-test",

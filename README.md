@@ -107,6 +107,24 @@ servers:
         funnel: true   # expose publicly via Tailscale Funnel
 ```
 
+To publish every TCP port on a host you can already dial (for example `127.0.0.2`), set `forward` on the server. The node still appears as its hostname on the tailnet. A connection to `booba.example.ts.net:22` is dialed as `127.0.0.2:22`.
+
+```yaml
+servers:
+  booba:
+    hostname: booba
+    token: prod
+    forward: 127.0.0.2
+```
+
+`forward` is a host without a port. IPv4, IPv6, and hostnames are valid. `forward: 127.0.0.2:80` is rejected.
+
+Handlers still bind first. `forward` is only the miss path: a handler on `:80` owns `:80`; `:22` with no handler goes to `forward:22`. Omit `forward` and unmatched TCP is rejected, as before.
+
+A server with no handlers and no `forward` is valid. The node stays on the tailnet and rejects every connection. The process logs a warning.
+
+`forward` is TCP only. UDP, ICMP (other than ping to the tsnet node), and Funnel are unchanged: Funnel still needs an explicit handler on 443, 8443, or 10000. The upstream sees the ts-proxy process as the client, not the tailnet peer.
+
 ### Important notes about configuration
 - Server and token names must match `^[a-zA-Z0-9_]+$` (letters, numbers, underscore).
 - Each server gets its own subdirectory under `state_dir/<server-name>`.
@@ -131,6 +149,7 @@ No plans for bumping the major versions yet.
 ## Next steps
 - [ ] A way to expose a folder, maybe using single page application patterns, instead of only ports.
 - [x] Multi-server support via YAML configuration (and a single process) — implemented. See `example-config.yaml` and the `server` / `config` subcommands.
+- [x] `forward` wraps a reachable host as one Tailscale node for unmatched TCP ports.
 
 ## Related projects
 This project re-uses the same Tailscale `tsnet` + header primitives as

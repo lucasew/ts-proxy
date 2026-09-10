@@ -140,11 +140,9 @@ func (h *TCPHandler) Serve(ctx context.Context, ln net.Listener) error {
 		// Successful accept: allow the next failure to log immediately.
 		h.lastAcceptErrorLog = time.Time{}
 		slog.Info("tcp connection", "remote", conn.RemoteAddr())
-		h.sessions.Add(1)
-		go func() {
-			defer h.sessions.Done()
+		h.sessions.Go(func() {
 			h.handleConn(ctx, conn)
-		}()
+		})
 	}
 }
 
@@ -155,15 +153,24 @@ func isListenerClosed(err error) bool {
 }
 
 func (h *TCPHandler) handleConn(ctx context.Context, downstream net.Conn) {
+	h.ServeConn(ctx, downstream, h.upstreamNetwork, h.upstreamAddress)
+}
+
+// ServeConn splices downstream to network://address. Used by the listen
+// loop and by the server-level forward fallback (dynamic dest port).
+func (h *TCPHandler) ServeConn(ctx context.Context, downstream net.Conn, network, address string) {
+	h.sessions.Add(1)
+	defer h.sessions.Done()
+
 	h.track(downstream)
 	defer h.untrack(downstream)
 
 	d := upstreamDialer(h.dialTimeout)
-	upstream, err := d.DialContext(ctx, h.upstreamNetwork, h.upstreamAddress)
+	upstream, err := d.DialContext(ctx, network, address)
 	if err != nil {
 		// Cancel during shutdown is expected; real dial failures are not.
 		if ctx.Err() == nil {
-			tsproxy.ReportError(err, "context", "tcp dial upstream", "upstream", h.upstreamAddress)
+			tsproxy.ReportError(err, "context", "tcp dial upstream", "upstream", address)
 		}
 		if cerr := downstream.Close(); cerr != nil && ctx.Err() == nil {
 			tsproxy.ReportError(cerr, "context", "downstream close error")
@@ -205,6 +212,12 @@ func (h *TCPHandler) handleConn(ctx context.Context, downstream net.Conn) {
 		tsproxy.ReportError(err, "context", "upstream close error")
 	}
 	slog.Info("tcp disconnected", "remote", downstream.RemoteAddr())
+}
+
+// Shutdown closes tracked connections and waits for in-flight splices.
+func (h *TCPHandler) Shutdown() {
+	h.closeActive()
+	h.sessions.Wait()
 }
 
 // closeWriter is implemented by *net.TCPConn (and similar) to shut down only

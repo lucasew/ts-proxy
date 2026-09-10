@@ -26,6 +26,11 @@ let
       {
         hostname = host.name;
         token = host.token;
+      }
+      // (lib.optionalAttrs (host.forward != "") {
+        inherit (host) forward;
+      })
+      // (lib.optionalAttrs (host.address != "") {
         handlers = [
           (
             {
@@ -40,7 +45,7 @@ let
             })
           )
         ];
-      }
+      })
     ) cfg.hosts;
   };
 
@@ -131,8 +136,15 @@ in
                 };
 
                 address = lib.mkOption {
-                  description = "Second parameter of net.Dial";
+                  description = "Second parameter of net.Dial. Empty skips the handler list when forward is set.";
                   type = lib.types.str;
+                  default = "";
+                };
+
+                forward = lib.mkOption {
+                  description = "Host (no port) that receives unmatched inbound TCP on this node";
+                  type = lib.types.str;
+                  default = "";
                 };
 
                 listen = lib.mkOption {

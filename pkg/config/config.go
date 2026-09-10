@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"os"
 	"regexp"
 	"sort"
@@ -17,12 +19,12 @@ var (
 	ErrNameEmpty          = errors.New("name cannot be empty")
 	ErrNameInvalid        = errors.New("must contain only letters, numbers, and underscores")
 	ErrUndefinedToken     = errors.New("references undefined token")
-	ErrNoHandlers         = errors.New("no handlers defined")
 	ErrUnknownHandlerType = errors.New("unknown type")
 	ErrListenRequired     = errors.New("listen address is required")
 	ErrUpstreamRequired   = errors.New("upstream_address is required")
 	ErrDuplicateListen    = errors.New("duplicate listen address")
 	ErrUndefinedEnvVar    = errors.New("references undefined environment variable(s)")
+	ErrForwardHostOnly    = errors.New("forward must be a host without a port")
 )
 
 // Config is the top-level configuration for ts-proxy.
@@ -41,8 +43,12 @@ type TokenConfig struct {
 
 // ServerConfig defines a single Tailscale node with its handlers.
 type ServerConfig struct {
-	Hostname string          `mapstructure:"hostname" yaml:"hostname"`
-	Token    string          `mapstructure:"token" yaml:"token"`
+	Hostname string `mapstructure:"hostname" yaml:"hostname"`
+	Token    string `mapstructure:"token" yaml:"token"`
+	// Forward is a host (no port) that receives unmatched inbound TCP.
+	// Each connection to the node on port N is dialed as Forward:N.
+	// Empty means unmatched TCP is rejected. Explicit handlers still win.
+	Forward  string          `mapstructure:"forward" yaml:"forward,omitempty"`
 	Handlers []HandlerConfig `mapstructure:"handlers" yaml:"handlers"`
 }
 
@@ -82,6 +88,7 @@ func (c *Config) SetDefaults() {
 		if srv.Hostname == "" {
 			srv.Hostname = name
 		}
+		srv.Forward = strings.TrimSpace(srv.Forward)
 		for i := range srv.Handlers {
 			h := &srv.Handlers[i]
 			// Funnel always terminates TLS at the Tailscale edge. Force TLS so
@@ -113,6 +120,7 @@ func (c *Config) SetDefaults() {
 //   - tokens.<name>.auth_key
 //   - servers.<name>.hostname
 //   - servers.<name>.token
+//   - servers.<name>.forward
 //   - servers.<name>.handlers[].type
 //   - servers.<name>.handlers[].listen
 //   - servers.<name>.handlers[].upstream_address
@@ -181,6 +189,9 @@ func (c *Config) ExpandEnv() error {
 		srv.Token, err = expand(fmt.Sprintf("server %q token", sname), srv.Token)
 		collect(err)
 
+		srv.Forward, err = expand(fmt.Sprintf("server %q forward", sname), srv.Forward)
+		collect(err)
+
 		for i := range srv.Handlers {
 			h := &srv.Handlers[i]
 			prefix := fmt.Sprintf("server %q handler[%d]", sname, i)
@@ -220,8 +231,8 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("server %q: %w %q", name, ErrUndefinedToken, srv.Token)
 			}
 		}
-		if len(srv.Handlers) == 0 {
-			return fmt.Errorf("server %q: %w", name, ErrNoHandlers)
+		if err := validateForward(srv.Forward); err != nil {
+			return fmt.Errorf("server %q: %w", name, err)
 		}
 		seen := make(map[string]bool)
 		for i, h := range srv.Handlers {
@@ -242,6 +253,24 @@ func (c *Config) Validate() error {
 			}
 			seen[key] = true
 		}
+	}
+	return nil
+}
+
+// validateForward checks that forward is empty or a host with no port.
+// IPv4, IPv6 (unbracketed), and hostnames without ':' are accepted.
+func validateForward(fwd string) error {
+	if fwd == "" {
+		return nil
+	}
+	if _, err := netip.ParseAddr(fwd); err == nil {
+		return nil
+	}
+	if _, _, err := net.SplitHostPort(fwd); err == nil {
+		return fmt.Errorf("%w: %q", ErrForwardHostOnly, fwd)
+	}
+	if strings.Contains(fwd, ":") || strings.ContainsAny(fwd, "/[]") {
+		return fmt.Errorf("%w: %q", ErrForwardHostOnly, fwd)
 	}
 	return nil
 }
@@ -328,6 +357,9 @@ func (c *Config) DisplayString() string {
 		header := fmt.Sprintf("%s (hostname: %s)", name, srv.Hostname)
 		if srv.Token != "" {
 			header += fmt.Sprintf(" [token: %s]", srv.Token)
+		}
+		if srv.Forward != "" {
+			header += fmt.Sprintf(" [forward: %s]", srv.Forward)
 		}
 		header += "\n"
 		sections = append(sections, HandlerSection{

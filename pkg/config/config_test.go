@@ -94,13 +94,55 @@ func TestConfigValidate(t *testing.T) {
 			wantErr: ErrUndefinedToken,
 		},
 		{
-			name: "no handlers",
+			name: "no handlers is allowed",
 			modify: func(c *Config) {
 				srv := c.Servers["web"]
 				srv.Handlers = nil
 				c.Servers["web"] = srv
 			},
-			wantErr: ErrNoHandlers,
+		},
+		{
+			name: "forward only is allowed",
+			modify: func(c *Config) {
+				srv := c.Servers["web"]
+				srv.Handlers = nil
+				srv.Forward = "127.0.0.2"
+				c.Servers["web"] = srv
+			},
+		},
+		{
+			name: "forward with port is rejected",
+			modify: func(c *Config) {
+				srv := c.Servers["web"]
+				srv.Forward = "127.0.0.2:80"
+				c.Servers["web"] = srv
+			},
+			wantErr: ErrForwardHostOnly,
+		},
+		{
+			name: "forward ipv6 is allowed",
+			modify: func(c *Config) {
+				srv := c.Servers["web"]
+				srv.Forward = "::1"
+				c.Servers["web"] = srv
+			},
+		},
+		{
+			name: "forward hostname is allowed",
+			modify: func(c *Config) {
+				srv := c.Servers["web"]
+				srv.Forward = "nas.lan"
+				c.Servers["web"] = srv
+			},
+		},
+		{
+			name: "forward bracketed ipv6 with port is rejected",
+			modify: func(c *Config) {
+				srv := c.Servers["web"]
+				srv.Forward = "[::1]:80"
+				c.Servers["web"] = srv
+			},
+			wantErr: ErrForwardHostOnly,
 		},
 		{
 			name: "unknown handler type",
@@ -229,6 +271,31 @@ func TestExpandEnv(t *testing.T) {
 	}
 	if cfg.Tokens["literal"].AuthKey != "tskey-literal" {
 		t.Errorf("literal auth_key = %q, want tskey-literal", cfg.Tokens["literal"].AuthKey)
+	}
+}
+
+func TestExpandEnvForward(t *testing.T) {
+	t.Setenv("TEST_FORWARD_HOST", "127.0.0.2")
+	cfg := validConfig()
+	srv := cfg.Servers["web"]
+	srv.Forward = "${TEST_FORWARD_HOST}"
+	cfg.Servers["web"] = srv
+	if err := cfg.ExpandEnv(); err != nil {
+		t.Fatalf("ExpandEnv: %v", err)
+	}
+	if got := cfg.Servers["web"].Forward; got != "127.0.0.2" {
+		t.Fatalf("forward = %q, want 127.0.0.2", got)
+	}
+}
+
+func TestDisplayStringForward(t *testing.T) {
+	cfg := validConfig()
+	srv := cfg.Servers["web"]
+	srv.Forward = "127.0.0.2"
+	cfg.Servers["web"] = srv
+	s := cfg.DisplayString()
+	if !strings.Contains(s, "[forward: 127.0.0.2]") {
+		t.Fatalf("DisplayString missing forward: %q", s)
 	}
 }
 
