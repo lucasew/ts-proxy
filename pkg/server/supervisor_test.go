@@ -54,8 +54,8 @@ func TestNewSupervisorPassesForward(t *testing.T) {
 	cfg := &config.Config{
 		StateDir: "/var/lib/ts-proxy",
 		Servers: map[string]config.ServerConfig{
-			"booba": {
-				Hostname: "booba",
+			"gremio": {
+				Hostname: "gremio",
 				Forward:  "127.0.0.2",
 			},
 		},

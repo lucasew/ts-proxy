@@ -107,12 +107,12 @@ servers:
         funnel: true   # expose publicly via Tailscale Funnel
 ```
 
-To publish every TCP port on a host you can already dial (for example `127.0.0.2`), set `forward` on the server. The node still appears as its hostname on the tailnet. A connection to `booba.example.ts.net:22` is dialed as `127.0.0.2:22`.
+To publish every TCP port on a host you can already dial (for example `127.0.0.2`), set `forward` on the server. The node still appears as its hostname on the tailnet. A connection to `gremio.example.ts.net:22` is dialed as `127.0.0.2:22`.
 
 ```yaml
 servers:
-  booba:
-    hostname: booba
+  gremio:
+    hostname: gremio
     token: prod
     forward: 127.0.0.2
 ```
