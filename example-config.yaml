@@ -64,3 +64,14 @@ servers:
         listen: ":22"
         upstream_address: "127.0.0.1:22"
         upstream_network: "tcp"   # "tcp" or "udp"
+
+  # Wrap a whole host: unmatched TCP to booba.example.ts.net:N
+  # is dialed as 127.0.0.2:N. Optional handlers still win on their ports.
+  booba:
+    hostname: booba
+    token: production
+    forward: "127.0.0.2"
+    handlers:
+      - type: http
+        listen: ":80"
+        upstream_address: "127.0.0.2:8080"
