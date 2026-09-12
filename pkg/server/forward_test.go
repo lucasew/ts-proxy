@@ -1,13 +1,12 @@
 package server
 
 import (
-	"io"
 	"net"
 	"net/netip"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/lucasew/ts-proxy/internal/nettest"
 	"github.com/lucasew/ts-proxy/pkg/handler"
 )
 
@@ -55,24 +54,8 @@ func TestFallbackTCPSplicesDestPort(t *testing.T) {
 	}
 	port := uint16(p)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer c.Close()
-		buf := make([]byte, 64)
-		n, err := c.Read(buf)
-		if err != nil && err != io.EOF {
-			return
-		}
-		if _, err := c.Write([]byte("pong:" + string(buf[:n]))); err != nil {
-			return
-		}
-	}()
+	wait := nettest.AcceptPongOnce(ln)
+	defer wait()
 
 	h := handler.NewTCP("tcp", "")
 	cb := forwardFallback{ctx: t.Context(), name: "gremio", host: host, h: h}.handle
@@ -116,7 +99,6 @@ func TestFallbackTCPSplicesDestPort(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("fallback handler did not finish")
 	}
-	wg.Wait()
 }
 
 func TestFallbackTCPRejectsNothing(t *testing.T) {
