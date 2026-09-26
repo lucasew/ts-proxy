@@ -36,6 +36,14 @@ func TestValidateSlug(t *testing.T) {
 	}
 }
 
+// withWeb copies the "web" server, applies edit, and stores it back.
+// ServerConfig is a map value, so field writes on the copy would otherwise be lost.
+func withWeb(c *Config, edit func(*ServerConfig)) {
+	srv := c.Servers["web"]
+	edit(&srv)
+	c.Servers["web"] = srv
+}
+
 func validConfig() Config {
 	return Config{
 		StateDir: "/tmp/test",
@@ -87,107 +95,87 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name: "missing token reference",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Token = "nonexistent"
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Token = "nonexistent" })
 			},
 			wantErr: ErrUndefinedToken,
 		},
 		{
 			name: "no handlers is allowed",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Handlers = nil
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Handlers = nil })
 			},
 		},
 		{
 			name: "forward only is allowed",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Handlers = nil
-				srv.Forward = "127.0.0.2"
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) {
+					srv.Handlers = nil
+					srv.Forward = "127.0.0.2"
+				})
 			},
 		},
 		{
 			name: "forward with port is rejected",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Forward = "127.0.0.2:80"
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Forward = "127.0.0.2:80" })
 			},
 			wantErr: ErrForwardHostOnly,
 		},
 		{
 			name: "forward ipv6 is allowed",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Forward = "::1"
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Forward = "::1" })
 			},
 		},
 		{
 			name: "forward hostname is allowed",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Forward = "nas.lan"
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Forward = "nas.lan" })
 			},
 		},
 		{
 			name: "forward bracketed ipv6 with port is rejected",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Forward = "[::1]:80"
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Forward = "[::1]:80" })
 			},
 			wantErr: ErrForwardHostOnly,
 		},
 		{
 			name: "unknown handler type",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Handlers[0].Type = "grpc"
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Handlers[0].Type = "grpc" })
 			},
 			wantErr: ErrUnknownHandlerType,
 		},
 		{
 			name: "missing listen",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Handlers[0].Listen = ""
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Handlers[0].Listen = "" })
 			},
 			wantErr: ErrListenRequired,
 		},
 		{
 			name: "missing upstream_address",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Handlers[0].UpstreamAddress = ""
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Handlers[0].UpstreamAddress = "" })
 			},
 			wantErr: ErrUpstreamRequired,
 		},
 		{
 			name: "duplicate listen address",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Handlers = append(srv.Handlers, HandlerConfig{
-					Type: "tcp", Listen: ":80", UpstreamAddress: "localhost:9090", UpstreamNetwork: "tcp",
+				withWeb(c, func(srv *ServerConfig) {
+					srv.Handlers = append(srv.Handlers, HandlerConfig{
+						Type: "tcp", Listen: ":80", UpstreamAddress: "localhost:9090", UpstreamNetwork: "tcp",
+					})
 				})
-				c.Servers["web"] = srv
 			},
 			wantErr: ErrDuplicateListen,
 		},
 		{
 			name: "empty token ref is allowed",
 			modify: func(c *Config) {
-				srv := c.Servers["web"]
-				srv.Token = ""
-				c.Servers["web"] = srv
+				withWeb(c, func(srv *ServerConfig) { srv.Token = "" })
 			},
 		},
 	}
@@ -277,9 +265,7 @@ func TestExpandEnv(t *testing.T) {
 func TestExpandEnvForward(t *testing.T) {
 	t.Setenv("TEST_FORWARD_HOST", "127.0.0.2")
 	cfg := validConfig()
-	srv := cfg.Servers["web"]
-	srv.Forward = "${TEST_FORWARD_HOST}"
-	cfg.Servers["web"] = srv
+	withWeb(&cfg, func(srv *ServerConfig) { srv.Forward = "${TEST_FORWARD_HOST}" })
 	if err := cfg.ExpandEnv(); err != nil {
 		t.Fatalf("ExpandEnv: %v", err)
 	}
@@ -290,9 +276,7 @@ func TestExpandEnvForward(t *testing.T) {
 
 func TestDisplayStringForward(t *testing.T) {
 	cfg := validConfig()
-	srv := cfg.Servers["web"]
-	srv.Forward = "127.0.0.2"
-	cfg.Servers["web"] = srv
+	withWeb(&cfg, func(srv *ServerConfig) { srv.Forward = "127.0.0.2" })
 	s := cfg.DisplayString()
 	if !strings.Contains(s, "[forward: 127.0.0.2]") {
 		t.Fatalf("DisplayString missing forward: %q", s)
