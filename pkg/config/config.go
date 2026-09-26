@@ -329,6 +329,20 @@ type HandlerSection struct {
 	Handlers []HandlerConfig
 }
 
+// SectionHeader formats one display block: name, parenthetical identity,
+// optional token and forward tags, and a trailing newline.
+// identity is the text inside the parentheses (configured "hostname: …" or a live FQDN).
+func SectionHeader(name, identity, token, forward string) string {
+	header := fmt.Sprintf("%s (%s)", name, identity)
+	if token != "" {
+		header += fmt.Sprintf(" [token: %s]", token)
+	}
+	if forward != "" {
+		header += fmt.Sprintf(" [forward: %s]", forward)
+	}
+	return header + "\n"
+}
+
 // FormatHandlerSections renders handler tables under each section header.
 // Column widths are computed across all sections so multi-server output lines up.
 func FormatHandlerSections(sections []HandlerSection) string {
@@ -354,16 +368,8 @@ func (c *Config) DisplayString() string {
 	sections := make([]HandlerSection, 0, len(names))
 	for _, name := range names {
 		srv := c.Servers[name]
-		header := fmt.Sprintf("%s (hostname: %s)", name, srv.Hostname)
-		if srv.Token != "" {
-			header += fmt.Sprintf(" [token: %s]", srv.Token)
-		}
-		if srv.Forward != "" {
-			header += fmt.Sprintf(" [forward: %s]", srv.Forward)
-		}
-		header += "\n"
 		sections = append(sections, HandlerSection{
-			Header:   header,
+			Header:   SectionHeader(name, "hostname: "+srv.Hostname, srv.Token, srv.Forward),
 			Handlers: srv.Handlers,
 		})
 	}
