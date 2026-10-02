@@ -87,13 +87,8 @@ func (s *Supervisor) DisplayAuthenticated() string {
 	sections := make([]config.HandlerSection, 0, len(s.servers))
 	for _, srv := range s.servers {
 		scfg := s.cfg.Servers[srv.Name()]
-		header := fmt.Sprintf("%s (%s)", srv.Name(), srv.FQDN())
-		if scfg.Forward != "" {
-			header += fmt.Sprintf(" [forward: %s]", scfg.Forward)
-		}
-		header += "\n"
 		sections = append(sections, config.HandlerSection{
-			Header:   header,
+			Header:   config.SectionHeader(srv.Name(), srv.FQDN(), "", scfg.Forward),
 			Handlers: scfg.Handlers,
 		})
 	}
