@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lucasew/ts-proxy/internal/nettest"
 )
 
 // ErrAcceptTransient is a non-closed Accept failure used to exercise the
@@ -208,24 +210,8 @@ func TestHandleConnProxiesBytes(t *testing.T) {
 	}
 	defer ln.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		buf := make([]byte, 64)
-		n, err := conn.Read(buf)
-		if err != nil && err != io.EOF {
-			return
-		}
-		if _, err := conn.Write([]byte("pong:" + string(buf[:n]))); err != nil {
-			return
-		}
-	}()
+	wait := nettest.AcceptPongOnce(ln)
+	defer wait()
 
 	h := NewTCP("tcp", ln.Addr().String())
 	h.dialTimeout = 2 * time.Second
@@ -261,7 +247,6 @@ func TestHandleConnProxiesBytes(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("handleConn did not finish after client close")
 	}
-	wg.Wait()
 }
 
 // TestServeHalfCloseDeliversResponse ensures that when the client finishes
