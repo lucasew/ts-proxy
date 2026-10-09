@@ -7,7 +7,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.104.0
+	tailscale.com v1.104.1
 )
 
 require (
