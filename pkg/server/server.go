@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync/atomic"
 
+	"github.com/lewtec/lewkit/x/event"
 	"github.com/lucasew/ts-proxy/pkg/config"
 	"github.com/lucasew/ts-proxy/pkg/handler"
 	"github.com/lucasew/ts-proxy/pkg/tsproxy"
@@ -38,6 +39,7 @@ type Server struct {
 	opts Options
 	sm   *StateMachine
 	ts   currentTS
+	bus  *event.Bus[struct{}]
 }
 
 // NewServer creates a server from options.
@@ -75,6 +77,14 @@ func (s *Server) FQDN() string {
 func (s *Server) mustTransition(to State) {
 	if err := s.sm.Transition(to); err != nil {
 		slog.Warn("state transition rejected", "server", s.name, "to", to, "current", s.sm.Current(), "err", err)
+		return
+	}
+	s.publishStatus()
+}
+
+func (s *Server) publishStatus() {
+	if s.bus != nil {
+		s.bus.PublishKeep(struct{}{})
 	}
 }
 
@@ -220,6 +230,7 @@ func (s *Server) Close() error {
 // ResetState prepares the server for a restart by resetting the state machine.
 func (s *Server) ResetState() {
 	s.sm.Reset()
+	s.publishStatus()
 }
 
 // currentTS publishes the live tsnet node.

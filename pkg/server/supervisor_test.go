@@ -90,7 +90,7 @@ func TestSnapshotHealthFollowsRunningState(t *testing.T) {
 		},
 	}
 	sup := NewSupervisor(cfg)
-	h := status.NewHandler(sup.Snapshot)
+	h := status.NewHandler(sup.Snapshot, sup.bus)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))

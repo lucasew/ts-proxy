@@ -16,6 +16,7 @@ import (
 
 	jsonv2 "encoding/json/v2"
 
+	"github.com/lewtec/lewkit/x/event"
 	"github.com/lewtec/lewkit/x/http/asset"
 	"github.com/lewtec/lewkit/x/http/asset/sakuracss"
 )
@@ -30,6 +31,7 @@ const (
 
 	stateRunning = "running"
 	probeTimeout = 300 * time.Millisecond
+	eventEvery   = 5 * time.Second
 )
 
 // Server is one tsnet server at a moment in time.
@@ -61,9 +63,9 @@ func Listen(addr string) (net.Listener, error) {
 
 // Serve serves snap until ctx is canceled, then returns nil.
 // Any other serve error is returned. Serve closes ln.
-func Serve(ctx context.Context, ln net.Listener, snap func() []Server) error {
+func Serve(ctx context.Context, ln net.Listener, snap func() []Server, bus *event.Bus[struct{}]) error {
 	srv := &http.Server{
-		Handler:           NewHandler(snap),
+		Handler:           NewHandler(snap, bus),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	stop := context.AfterFunc(ctx, func() {
@@ -83,18 +85,23 @@ func Serve(ctx context.Context, ln net.Listener, snap func() []Server) error {
 	return err
 }
 
-// NewHandler serves GET /, GET /health, and the sakuracss asset.
-// snap may be nil. /health is 200 only when every server state is running.
-func NewHandler(snap func() []Server) http.Handler {
-	p := &page{snap: snap}
+// NewHandler serves GET /, GET /health, GET /events, and the sakuracss asset.
+// snap may be nil. bus may be nil. /health is 200 only when every server state is running.
+// /events is a server-sent stream. A bus value wakes it immediately. It also
+// sends a fresh probe every 5 seconds so upstream availability moves without
+// a lifecycle change.
+func NewHandler(snap func() []Server, bus *event.Bus[struct{}]) http.Handler {
+	p := &page{snap: snap, bus: bus}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", p.home)
 	mux.HandleFunc("GET /health", p.health)
+	mux.HandleFunc("GET /events", p.events)
 	return asset.Mount(mux)
 }
 
 type page struct {
 	snap func() []Server
+	bus  *event.Bus[struct{}]
 }
 
 type healthDoc struct {
@@ -149,6 +156,70 @@ func (p *page) home(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (p *page) events(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	var updates <-chan struct{}
+	if p.bus != nil {
+		updates = p.bus.Subscribe(r.Context())
+	}
+	if !p.sendEvent(w, r) {
+		return
+	}
+	ticker := time.NewTicker(eventEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case _, ok := <-updates:
+			if !ok {
+				return
+			}
+			if !p.sendEvent(w, r) {
+				return
+			}
+		case <-ticker.C:
+			if !p.sendEvent(w, r) {
+				return
+			}
+		}
+	}
+}
+
+func (p *page) sendEvent(w http.ResponseWriter, r *http.Request) bool {
+	body, err := renderBody(p.probe(r.Context()))
+	if err != nil {
+		slog.Info("status event render", "err", err)
+		return false
+	}
+	if err := writeEvent(w, body); err != nil {
+		slog.Info("status event write", "err", err)
+		return false
+	}
+	if err := http.NewResponseController(w).Flush(); err != nil {
+		slog.Info("status event flush", "err", err)
+		return false
+	}
+	return true
+}
+
+func writeEvent(w http.ResponseWriter, body []byte) error {
+	for line := range bytes.SplitSeq(body, []byte("\n")) {
+		if _, err := w.Write([]byte("data: ")); err != nil {
+			return err
+		}
+		if _, err := w.Write(line); err != nil {
+			return err
+		}
+		if _, err := w.Write([]byte("\n")); err != nil {
+			return err
+		}
+	}
+	_, err := w.Write([]byte("\n"))
+	return err
+}
+
 func renderHome(servers []Server) ([]byte, error) {
 	data := struct {
 		Style   string
@@ -160,7 +231,22 @@ func renderHome(servers []Server) ([]byte, error) {
 		Servers: servers,
 	}
 	var buf bytes.Buffer
-	if err := pageTmpl.Execute(&buf, data); err != nil {
+	if err := pageTmpl.ExecuteTemplate(&buf, "page", data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func renderBody(servers []Server) ([]byte, error) {
+	data := struct {
+		OK      bool
+		Servers []Server
+	}{
+		OK:      allRunning(servers),
+		Servers: servers,
+	}
+	var buf bytes.Buffer
+	if err := pageTmpl.ExecuteTemplate(&buf, "body", data); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -255,18 +341,27 @@ func probe(ctx context.Context, network, address string) string {
 	return AvailabilityUp
 }
 
-var pageTmpl = template.Must(template.New("status").Parse(`<!DOCTYPE html>
+var pageTmpl = template.Must(template.New("status").Parse(`
+{{define "page"}}<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="5">
 <title>ts-proxy</title>
 <link rel="stylesheet" href="{{ .Style }}">
 </head>
 <body>
 <h1>ts-proxy</h1>
-{{ if .OK }}<p>All servers are running.</p>{{ else }}<p>Not every server is running.</p>{{ end }}
+<div id="status">{{template "body" .}}</div>
+<script>
+const box = document.getElementById("status");
+const stream = new EventSource("/events");
+stream.onmessage = (ev) => { box.innerHTML = ev.data; };
+</script>
+</body>
+</html>
+{{end}}
+{{define "body"}}{{ if .OK }}<p>All servers are running.</p>{{ else }}<p>Not every server is running.</p>{{ end }}
 {{ range .Servers }}
 <h2>{{ .Name }}</h2>
 <dl>
@@ -283,7 +378,5 @@ var pageTmpl = template.Must(template.New("status").Parse(`<!DOCTYPE html>
 </tbody>
 </table>
 {{ else }}<p>No handlers.</p>{{ end }}
-{{ end }}
-</body>
-</html>
+{{ end }}{{end}}
 `))

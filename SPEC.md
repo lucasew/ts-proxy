@@ -84,7 +84,7 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 - INV-8 `forward` MUST NOT accept UDP or non-TCP IP protocols.
 - INV-9 Funnel MUST exist only through an explicit handler (`ListenFunnel`).
 - INV-10 HTTP handlers MUST add Tailscale WhoIs headers. TCP splice and `forward` MUST NOT invent those headers.
-- INV-11 The status listener MUST be plain HTTP on `status_listen` (default `127.0.0.1:8090`). It MUST NOT use tsnet `Listen`, `ListenTLS`, or `ListenFunnel`. `GET /health` MUST return 200 only when every server state is `running`, and 503 otherwise. `GET /` MUST show each server state and each handler upstream availability. `--dry-run` MUST NOT bind it. An empty `status_listen` before defaults is filled. After defaults, a value that is not `host:port` MUST fail `Validate`.
+- INV-11 The status listener MUST be plain HTTP on `status_listen` (default `127.0.0.1:8090`). It MUST NOT use tsnet `Listen`, `ListenTLS`, or `ListenFunnel`. `GET /health` MUST return 200 only when every server state is `running`, and 503 otherwise. `GET /` MUST show each server state and each handler upstream availability. `GET /events` MUST push a server-sent event when a server changes state. `--dry-run` MUST NOT bind it. An empty `status_listen` before defaults is filled. After defaults, a value that is not `host:port` MUST fail `Validate`.
 
 ## Errors
 
@@ -105,6 +105,7 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 - Omitting `forward` leaves unmatched ports closed.
 - `ts-proxyd config` prints the resolved `forward` value.
 - `GET /health` on `127.0.0.1:8090` returns 200 when every server is `running`, and the page at `/` shows that state.
+- `GET /events` pushes an update when a server changes state.
 - `ts-proxyd config` prints the resolved `status_listen` value.
 
 ## Later work

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lewtec/lewkit/x/event"
 	"github.com/lucasew/ts-proxy/internal/ctxwait"
 	"github.com/lucasew/ts-proxy/pkg/config"
 	"github.com/lucasew/ts-proxy/pkg/status"
@@ -22,10 +23,12 @@ const restartDelay = 5 * time.Second
 type Supervisor struct {
 	cfg     *config.Config
 	servers []*Server
+	bus     *event.Bus[struct{}]
 }
 
 // NewSupervisor creates a supervisor from a validated config.
 func NewSupervisor(cfg *config.Config) *Supervisor {
+	bus := event.New[struct{}]()
 	var servers []*Server
 	for _, name := range cfg.ServerNames() {
 		scfg := cfg.Servers[name]
@@ -43,11 +46,13 @@ func NewSupervisor(cfg *config.Config) *Supervisor {
 			Forward:  scfg.Forward,
 			Handlers: scfg.Handlers,
 		})
+		srv.bus = bus
 		servers = append(servers, srv)
 	}
 	return &Supervisor{
 		cfg:     cfg,
 		servers: servers,
+		bus:     bus,
 	}
 }
 
@@ -153,7 +158,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		slog.Info("status listener", "addr", ln.Addr().String())
 		wg.Go(func() {
 			// Serve closes ln. A canceled ctx is a clean stop.
-			err := status.Serve(ctx, ln, s.Snapshot)
+			err := status.Serve(ctx, ln, s.Snapshot, s.bus)
 			if err != nil && ctx.Err() == nil {
 				fail(err)
 			}

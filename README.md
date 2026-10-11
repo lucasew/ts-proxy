@@ -74,7 +74,9 @@ Global flags (available to all commands):
 
 `ts-proxyd server` binds `status_listen` before it starts any Tailscale node. `--dry-run` does not bind it.
 
-Open `http://127.0.0.1:8090/` for a page that lists each server. The page shows the lifecycle state (`init`, `starting`, `authenticating`, `running`, `failed`, `stopped`), the hostname, `forward` when set, and each handler. Handler rows include a TCP dial result: `up`, `down`, or `unchecked` (UDP). The page reloads every 5 seconds and loads [Sakura CSS](https://github.com/oxalorg/sakura) from lewkit.
+Open `http://127.0.0.1:8090/` for a page that lists each server. The page shows the lifecycle state (`init`, `starting`, `authenticating`, `running`, `failed`, `stopped`), the hostname, `forward` when set, and each handler. Handler rows include a TCP dial result: `up`, `down`, or `unchecked` (UDP). The page loads [Sakura CSS](https://github.com/oxalorg/sakura) from lewkit.
+
+The page keeps a server-sent stream at `/events`. The stream pushes a lifecycle change at once. The stream checks handler availability every 5 seconds.
 
 `GET /health` returns JSON. The status is `200` when every server is `running`. Any other state returns `503`. The body lists each server and handler either way.
 
