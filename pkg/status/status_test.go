@@ -103,7 +103,7 @@ func TestHealthAndDash(t *testing.T) {
 			t.Fatalf("status = %d", rec.Code)
 		}
 		body := rec.Body.String()
-		for _, want := range []string{sakuracss.Path, "/events", "web", "running", "127.0.0.2", status.AvailabilityUp, "All servers are running."} {
+		for _, want := range []string{sakuracss.Path, "/events", "<svg", "web", "running", "127.0.0.2", status.AvailabilityUp, "All servers are running."} {
 			if !strings.Contains(body, want) {
 				t.Errorf("body missing %q", want)
 			}

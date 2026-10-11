@@ -341,7 +341,44 @@ func probe(ctx context.Context, network, address string) string {
 	return AvailabilityUp
 }
 
-var pageTmpl = template.Must(template.New("status").Parse(`
+const (
+	colorOK   = "#2e7d32"
+	colorBad  = "#c62828"
+	colorWait = "#ef6c00"
+	colorIdle = "#607d8b"
+)
+
+// glyphs are fixed inline icons. The map key is never copied into the SVG.
+var glyphs = map[string]struct {
+	color string
+	body  string
+}{
+	"running":        {colorOK, `<path d="M3.5 8.5 6.5 11.5 12.5 4.5"/>`},
+	"up":             {colorOK, `<path d="M3.5 8.5 6.5 11.5 12.5 4.5"/>`},
+	"failed":         {colorBad, `<path d="M4 4l8 8M12 4 4 12"/>`},
+	"down":           {colorBad, `<path d="M4 4l8 8M12 4 4 12"/>`},
+	"warn":           {colorWait, `<path d="M8 2.5 14.5 13.5h-13Z"/><path d="M8 6.5v3M8 11.5h.01"/>`},
+	"stopped":        {colorIdle, `<rect x="4" y="4" width="8" height="8" rx="1"/>`},
+	"init":           {colorIdle, `<circle cx="8" cy="8" r="5"/>`},
+	"unchecked":      {colorIdle, `<path d="M4 8h8"/>`},
+	"starting":       {colorWait, `<circle cx="8" cy="8" r="5"/><path d="M8 5v3.2l2.2 1.3"/>`},
+	"authenticating": {colorWait, `<rect x="4" y="7" width="8" height="5.5" rx="1"/><path d="M6 7V5.5a2 2 0 0 1 4 0V7"/>`},
+}
+
+func statusIcon(name string) template.HTML {
+	g, ok := glyphs[name]
+	if !ok {
+		return ""
+	}
+	return template.HTML(fmt.Sprintf(
+		`<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="%s" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.15em;margin-right:0.3em">%s</svg>`,
+		g.color, g.body,
+	))
+}
+
+var pageTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
+	"icon": statusIcon,
+}).Parse(`
 {{define "page"}}<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -361,11 +398,11 @@ stream.onmessage = (ev) => { box.innerHTML = ev.data; };
 </body>
 </html>
 {{end}}
-{{define "body"}}{{ if .OK }}<p>All servers are running.</p>{{ else }}<p>Not every server is running.</p>{{ end }}
+{{define "body"}}{{ if .OK }}<p>{{icon "running"}}All servers are running.</p>{{ else }}<p>{{icon "warn"}}Not every server is running.</p>{{ end }}
 {{ range .Servers }}
 <h2>{{ .Name }}</h2>
 <dl>
-<dt>State</dt><dd>{{ .State }}</dd>
+<dt>State</dt><dd>{{icon .State}}{{ .State }}</dd>
 <dt>Hostname</dt><dd>{{ .FQDN }}</dd>
 {{ if .Forward }}<dt>Forward</dt><dd>{{ .Forward }}</dd>{{ end }}
 </dl>
@@ -373,7 +410,7 @@ stream.onmessage = (ev) => { box.innerHTML = ev.data; };
 <table>
 <thead><tr><th>Type</th><th>Listen</th><th>Upstream</th><th>Availability</th></tr></thead>
 <tbody>
-{{ range .Handlers }}<tr><td>{{ .Type }}</td><td>{{ .Listen }}</td><td>{{ .Upstream }}</td><td>{{ .Availability }}</td></tr>
+{{ range .Handlers }}<tr><td>{{ .Type }}</td><td>{{ .Listen }}</td><td>{{ .Upstream }}</td><td>{{icon .Availability}}{{ .Availability }}</td></tr>
 {{ end }}
 </tbody>
 </table>
