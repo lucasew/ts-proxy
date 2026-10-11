@@ -106,6 +106,7 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 - `ts-proxyd config` prints the resolved `forward` value.
 - `GET /health` on `127.0.0.1:8090` returns 200 when every server is `running`, and the page at `/` shows that state.
 - `GET /events` pushes an update when a server changes state.
+- While a server is authenticating, the page shows its Tailscale login link.
 - `ts-proxyd config` prints the resolved `status_listen` value.
 
 ## Later work

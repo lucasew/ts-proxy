@@ -40,6 +40,7 @@ func TestHealthAndDash(t *testing.T) {
 			State:   "running",
 			FQDN:    "web.example.ts.net",
 			Forward: "127.0.0.2",
+			AuthURL: "https://login.tailscale.com/a/example",
 			Handlers: []status.Handler{
 				{Type: "tcp", Listen: ":22", Upstream: up.Addr().String(), Network: "tcp"},
 				{Type: "tcp", Listen: ":23", Upstream: closedAddr, Network: "tcp"},
@@ -90,7 +91,7 @@ func TestHealthAndDash(t *testing.T) {
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 		require.Equal(t, http.StatusOK, rec.Code)
 		body := rec.Body.String()
-		for _, want := range []string{sakuracss.Path, "/events", "<svg", "web", "running", "127.0.0.2", status.AvailabilityUp, "All servers are running."} {
+		for _, want := range []string{sakuracss.Path, "/events", "<svg", "web", "running", "127.0.0.2", "https://login.tailscale.com/a/example", status.AvailabilityUp, "All servers are running."} {
 			assert.Contains(t, body, want)
 		}
 	})

@@ -78,6 +78,8 @@ Open `http://127.0.0.1:8090/` for a page that lists each server. The page shows 
 
 The page keeps a server-sent stream at `/events`. The stream pushes a lifecycle change at once. The stream checks handler availability every 5 seconds.
 
+While a server still needs a user, the page shows that server's Tailscale login link. The link disappears after authentication.
+
 `GET /health` returns JSON. The status is `200` when every server is `running`. Any other state returns `503`. The body lists each server and handler either way.
 
 ```bash

@@ -47,6 +47,10 @@ templ DashBody(ok bool, servers []Server) {
 				<dt>Forward</dt>
 				<dd>{ srv.Forward }</dd>
 			}
+			if srv.AuthURL != "" {
+				<dt>Login</dt>
+				<dd><a href={ srv.AuthURL } target="_blank" rel="noopener">{ srv.AuthURL }</a></dd>
+			}
 		</dl>
 		if len(srv.Handlers) == 0 {
 			<p>No handlers.</p>

@@ -48,6 +48,7 @@ type Server struct {
 	State    string
 	FQDN     string
 	Forward  string
+	AuthURL  string
 	Handlers []Handler
 }
 
@@ -122,6 +123,7 @@ type healthServer struct {
 	State    string          `json:"state"`
 	FQDN     string          `json:"fqdn"`
 	Forward  string          `json:"forward,omitempty"`
+	AuthURL  string          `json:"auth_url,omitempty"`
 	Handlers []healthHandler `json:"handlers"`
 }
 
@@ -265,6 +267,7 @@ func (p *page) document(ctx context.Context) healthDoc {
 			State:    srv.State,
 			FQDN:     srv.FQDN,
 			Forward:  srv.Forward,
+			AuthURL:  srv.AuthURL,
 			Handlers: handlers,
 		}
 	}

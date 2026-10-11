@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"sync/atomic"
+	"time"
 
 	"github.com/lewtec/lewkit/x/event"
 	"github.com/lucasew/ts-proxy/pkg/config"
@@ -35,11 +36,12 @@ type Options struct {
 
 // Server manages a single Tailscale node and its handlers.
 type Server struct {
-	name string
-	opts Options
-	sm   *StateMachine
-	ts   currentTS
-	bus  *event.Bus[struct{}]
+	name    string
+	opts    Options
+	sm      *StateMachine
+	ts      currentTS
+	bus     *event.Bus[struct{}]
+	authURL atomic.Pointer[string]
 }
 
 // NewServer creates a server from options.
@@ -88,6 +90,51 @@ func (s *Server) publishStatus() {
 	}
 }
 
+// AuthURL is the Tailscale login link while this node still needs a user.
+// It is empty once the node is authenticated, and before Tailscale has a link.
+func (s *Server) AuthURL() string {
+	if cur := s.authURL.Load(); cur != nil {
+		return *cur
+	}
+	return ""
+}
+
+func (s *Server) setAuthURL(url string) {
+	if cur := s.authURL.Load(); cur != nil && *cur == url {
+		return
+	}
+	if url == "" && s.authURL.Load() == nil {
+		return
+	}
+	s.authURL.Store(&url)
+	s.publishStatus()
+}
+
+// collectAuthURL polls Tailscale until ctx ends and publishes when the login link changes.
+// LocalClient waits until Start finishes, so this must not run on the status request path.
+func (s *Server) collectAuthURL(ctx context.Context, ts *tsnet.Server) {
+	lc, err := ts.LocalClient()
+	if err != nil || ctx.Err() != nil {
+		return
+	}
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		st, err := lc.Status(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil && st != nil {
+			s.setAuthURL(st.AuthURL)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 // Start initializes the Tailscale node and authenticates.
 func (s *Server) Start(ctx context.Context) error {
 	s.mustTransition(StateStarting)
@@ -108,8 +155,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.mustTransition(StateAuthenticating)
 	slog.Info("authenticating", "server", s.name)
+	authCtx, stopAuth := context.WithCancel(ctx)
+	defer stopAuth()
+	go s.collectAuthURL(authCtx, ts)
 
 	_, err := ts.Up(ctx)
+	stopAuth()
+	s.setAuthURL("")
 	if err != nil {
 		s.mustTransition(StateFailed)
 		if cerr := ts.Close(); cerr != nil {

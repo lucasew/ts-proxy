@@ -124,6 +124,7 @@ func (s *Supervisor) Snapshot() []status.Server {
 			State:    string(srv.State()),
 			FQDN:     srv.FQDN(),
 			Forward:  srv.opts.Forward,
+			AuthURL:  srv.AuthURL(),
 			Handlers: handlers,
 		})
 	}
