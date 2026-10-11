@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"sync"
+	"sync/atomic"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
 	"github.com/lucasew/ts-proxy/pkg/handler"
@@ -37,8 +37,7 @@ type Server struct {
 	name string
 	opts Options
 	sm   *StateMachine
-	mu   sync.RWMutex
-	ts   *tsnet.Server
+	ts   currentTS
 }
 
 // NewServer creates a server from options.
@@ -63,10 +62,8 @@ func (s *Server) State() State {
 // FQDN returns the fully qualified domain name after authentication,
 // falling back to the configured hostname.
 func (s *Server) FQDN() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.ts != nil {
-		for _, domain := range s.ts.CertDomains() {
+	if ts := s.ts.get(); ts != nil {
+		for _, domain := range ts.CertDomains() {
 			return domain
 		}
 	}
@@ -97,7 +94,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.opts.AuthKey != "" {
 		ts.AuthKey = s.opts.AuthKey
 	}
-	s.setTS(ts)
+	s.ts.set(ts)
 
 	s.mustTransition(StateAuthenticating)
 	slog.Info("authenticating", "server", s.name)
@@ -108,7 +105,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if cerr := ts.Close(); cerr != nil {
 			tsproxy.ReportError(cerr, "context", "tailscale close error")
 		}
-		s.clearTS(ts)
+		s.ts.clear(ts)
 		return fmt.Errorf("tailscale up: %w", err)
 	}
 
@@ -118,7 +115,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Serve starts all handlers. Must be called after Start.
 func (s *Server) Serve(ctx context.Context) error {
-	ts := s.getTS()
+	ts := s.ts.get()
 	if ts == nil {
 		return ErrNotStarted
 	}
@@ -213,7 +210,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 // Close shuts down the Tailscale node.
 func (s *Server) Close() error {
-	ts := s.takeTS()
+	ts := s.ts.take()
 	if ts == nil {
 		return nil
 	}
@@ -225,34 +222,22 @@ func (s *Server) ResetState() {
 	s.sm.Reset()
 }
 
-func (s *Server) setTS(ts *tsnet.Server) {
-	s.mu.Lock()
-	s.ts = ts
-	s.mu.Unlock()
+// currentTS publishes the live tsnet node.
+// set, get, clear, and take are atomic so a status snapshot can read the
+// node while Start or Close swaps it.
+type currentTS struct {
+	p atomic.Pointer[tsnet.Server]
 }
 
-func (s *Server) getTS() *tsnet.Server {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.ts
-}
+func (c *currentTS) set(ts *tsnet.Server) { c.p.Store(ts) }
 
-// clearTS drops ts when it is still the current node.
-func (s *Server) clearTS(ts *tsnet.Server) {
-	s.mu.Lock()
-	if s.ts == ts {
-		s.ts = nil
-	}
-	s.mu.Unlock()
-}
+func (c *currentTS) get() *tsnet.Server { return c.p.Load() }
 
-func (s *Server) takeTS() *tsnet.Server {
-	s.mu.Lock()
-	ts := s.ts
-	s.ts = nil
-	s.mu.Unlock()
-	return ts
-}
+// clear forgets ts when it is still the published node.
+func (c *currentTS) clear(ts *tsnet.Server) { c.p.CompareAndSwap(ts, nil) }
+
+// take removes the published node and returns it.
+func (c *currentTS) take() *tsnet.Server { return c.p.Swap(nil) }
 
 func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handler.WhoIsFunc) (handler.Handler, error) {
 	switch hc.Type {
