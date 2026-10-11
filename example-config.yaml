@@ -8,8 +8,10 @@
 # You can also override top-level fields via flags or environment variables:
 #   --state-dir /path
 #   --stop-on-fail
+#   --status-listen 127.0.0.1:8090
 #   TS_PROXY_STATE_DIR=/path
 #   TS_PROXY_STOP_ON_FAIL=true
+#   TS_PROXY_STATUS_LISTEN=127.0.0.1:8090
 #
 # The "config" subcommand is useful for debugging:
 #   ts-proxyd config --config example-config.yaml
@@ -17,6 +19,9 @@
 
 state_dir: "${STATE_DIR}"
 stop_on_fail: false   # If true, any server failure stops the whole process
+
+# Loopback page (GET /) and GET /health. Default 127.0.0.1:8090.
+status_listen: "127.0.0.1:8090"
 
 # Named Tailscale auth tokens. One token can be referenced by many servers (1:n).
 tokens:

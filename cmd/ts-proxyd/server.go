@@ -2,40 +2,31 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
+	"github.com/lewtec/lewkit/x/cmd"
 	"github.com/lucasew/ts-proxy/pkg/server"
-	"github.com/spf13/cobra"
 )
 
-// ErrNoServers is returned when the config has no servers to run.
-var ErrNoServers = errors.New("no servers configured")
-
-var dryRun bool
-
-var serverCmd = &cobra.Command{
-	Use:   "server",
-	Short: "Start the ts-proxy server",
-	Long:  "Start the Tailscale proxy server that supervises all configured services.",
-	RunE:  runServer,
+type serverCmd struct {
+	DryRun cmd.Flag `long:"dry-run" help:"authenticate servers and display structure, then exit"`
 }
 
-func init() {
-	serverCmd.Flags().BoolVar(&dryRun, "dry-run", false, "authenticate servers and display structure, then exit")
-	rootCmd.AddCommand(serverCmd)
+func (serverCmd) Description() string {
+	return "Start the proxy and supervise every configured server."
 }
 
-func runServer(cmd *cobra.Command, args []string) error {
-	cfg, err := loadConfig()
+func (c *serverCmd) Run(ctx context.Context) error {
+	flags, err := flagsFrom(ctx)
 	if err != nil {
 		return err
 	}
-
+	cfg, err := loadConfig(flags)
+	if err != nil {
+		return err
+	}
 	if len(cfg.Servers) == 0 {
 		return ErrNoServers
 	}
@@ -45,24 +36,16 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(os.Stderr)
 
 	sup := server.NewSupervisor(cfg)
-
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	if dryRun {
+	if c.DryRun.Value() {
 		slog.Info("dry-run mode: authenticating servers...")
-		// Always tear down tsnet nodes, including when StartAll fails partway
-		// (StartAll also closes earlier successes; CloseAll is idempotent).
 		defer sup.CloseAll()
 		if err := sup.StartAll(ctx); err != nil {
 			return fmt.Errorf("dry-run auth: %w", err)
 		}
-
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprint(os.Stderr, "Authenticated servers:\n")
 		fmt.Fprint(os.Stderr, sup.DisplayAuthenticated())
 		return nil
 	}
-
 	return sup.Run(ctx)
 }

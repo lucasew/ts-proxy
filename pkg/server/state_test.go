@@ -94,6 +94,20 @@ func TestStateMachineInvalidTransitions(t *testing.T) {
 	}
 }
 
+func TestStateMachineReset(t *testing.T) {
+	sm := NewStateMachine()
+	if err := sm.Transition(StateStarting); err != nil {
+		t.Fatalf("Transition Starting: %v", err)
+	}
+	sm.Reset()
+	if sm.Current() != StateInit {
+		t.Fatalf("Current() = %s, want %s", sm.Current(), StateInit)
+	}
+	if err := sm.Transition(StateStarting); err != nil {
+		t.Fatalf("Transition after Reset: %v", err)
+	}
+}
+
 func TestStateMachineConcurrent(t *testing.T) {
 	sm := NewStateMachine()
 	if err := sm.Transition(StateStarting); err != nil {

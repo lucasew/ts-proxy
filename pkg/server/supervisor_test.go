@@ -1,10 +1,13 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
+	"github.com/lucasew/ts-proxy/pkg/status"
 )
 
 func TestNewSupervisorResolvesTokensAndStateDir(t *testing.T) {
@@ -71,6 +74,39 @@ func TestNewSupervisorPassesForward(t *testing.T) {
 	out := sup.DisplayAuthenticated()
 	if !strings.Contains(out, "[forward: 127.0.0.2]") {
 		t.Fatalf("DisplayAuthenticated missing forward: %q", out)
+	}
+}
+
+func TestSnapshotHealthFollowsRunningState(t *testing.T) {
+	cfg := &config.Config{
+		StateDir: "/var/lib/ts-proxy",
+		Servers: map[string]config.ServerConfig{
+			"web": {
+				Hostname: "my-web",
+				Handlers: []config.HandlerConfig{
+					{Type: "tcp", Listen: ":22", UpstreamAddress: "127.0.0.1:1", UpstreamNetwork: "tcp"},
+				},
+			},
+		},
+	}
+	sup := NewSupervisor(cfg)
+	h := status.NewHandler(sup.Snapshot)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("init health = %d, want 503, body %s", rec.Code, rec.Body)
+	}
+
+	sup.servers[0].mustTransition(StateStarting)
+	sup.servers[0].mustTransition(StateRunning)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("running health = %d, want 200, body %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"name":"web"`) && !strings.Contains(rec.Body.String(), `"name": "web"`) {
+		t.Fatalf("body = %s", rec.Body)
 	}
 }
 

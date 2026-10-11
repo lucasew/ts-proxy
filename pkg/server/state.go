@@ -41,6 +41,15 @@ func NewStateMachine() *StateMachine {
 	return &StateMachine{state: StateInit}
 }
 
+// Reset sets the machine back to Init.
+// Restart uses this instead of replacing the pointer so concurrent Current
+// calls keep a stable machine.
+func (sm *StateMachine) Reset() {
+	sm.mu.Lock()
+	sm.state = StateInit
+	sm.mu.Unlock()
+}
+
 // Current returns the current state.
 func (sm *StateMachine) Current() State {
 	sm.mu.RLock()

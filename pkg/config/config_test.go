@@ -219,6 +219,9 @@ func TestSetDefaults(t *testing.T) {
 	if cfg.StateDir != "/var/lib/ts-proxy" {
 		t.Errorf("StateDir = %q, want /var/lib/ts-proxy", cfg.StateDir)
 	}
+	if cfg.StatusListen != DefaultStatusListen {
+		t.Errorf("StatusListen = %q, want %s", cfg.StatusListen, DefaultStatusListen)
+	}
 
 	srv := cfg.Servers["myapp"]
 	if srv.Hostname != "myapp" {

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/lucasew/ts-proxy/pkg/config"
 	"github.com/lucasew/ts-proxy/pkg/handler"
@@ -36,6 +37,7 @@ type Server struct {
 	name string
 	opts Options
 	sm   *StateMachine
+	mu   sync.RWMutex
 	ts   *tsnet.Server
 }
 
@@ -61,6 +63,8 @@ func (s *Server) State() State {
 // FQDN returns the fully qualified domain name after authentication,
 // falling back to the configured hostname.
 func (s *Server) FQDN() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.ts != nil {
 		for _, domain := range s.ts.CertDomains() {
 			return domain
@@ -86,24 +90,25 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("create state dir %s: %w", s.opts.StateDir, err)
 	}
 
-	s.ts = &tsnet.Server{
+	ts := &tsnet.Server{
 		Hostname: s.opts.Hostname,
 		Dir:      s.opts.StateDir,
 	}
 	if s.opts.AuthKey != "" {
-		s.ts.AuthKey = s.opts.AuthKey
+		ts.AuthKey = s.opts.AuthKey
 	}
+	s.setTS(ts)
 
 	s.mustTransition(StateAuthenticating)
 	slog.Info("authenticating", "server", s.name)
 
-	_, err := s.ts.Up(ctx)
+	_, err := ts.Up(ctx)
 	if err != nil {
 		s.mustTransition(StateFailed)
-		if cerr := s.ts.Close(); cerr != nil {
+		if cerr := ts.Close(); cerr != nil {
 			tsproxy.ReportError(cerr, "context", "tailscale close error")
 		}
-		s.ts = nil
+		s.clearTS(ts)
 		return fmt.Errorf("tailscale up: %w", err)
 	}
 
@@ -113,11 +118,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Serve starts all handlers. Must be called after Start.
 func (s *Server) Serve(ctx context.Context) error {
-	if s.ts == nil {
+	ts := s.getTS()
+	if ts == nil {
 		return ErrNotStarted
 	}
 
-	lc, err := s.ts.LocalClient()
+	lc, err := ts.LocalClient()
 	if err != nil {
 		s.mustTransition(StateFailed)
 		return fmt.Errorf("local client: %w", err)
@@ -134,7 +140,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	if s.opts.Forward != "" {
 		fwd := handler.NewTCP("tcp", s.opts.Forward)
-		unreg := s.ts.RegisterFallbackTCPHandler(forwardFallback{
+		unreg := ts.RegisterFallbackTCPHandler(forwardFallback{
 			ctx:  gCtx,
 			name: s.name,
 			host: s.opts.Forward,
@@ -154,7 +160,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				return fmt.Errorf("create handler %s %s: %w", hc.Type, hc.Listen, err)
 			}
 
-			lf := s.listenerFunc(hc.TLS, hc.Funnel)
+			lf := listenerFunc(ts, hc.TLS, hc.Funnel)
 			ln, err := lf("tcp", hc.Listen)
 			if err != nil {
 				return fmt.Errorf("listen %s: %w", hc.Listen, err)
@@ -207,17 +213,45 @@ func (s *Server) Run(ctx context.Context) error {
 
 // Close shuts down the Tailscale node.
 func (s *Server) Close() error {
-	if s.ts != nil {
-		err := s.ts.Close()
-		s.ts = nil
-		return err
+	ts := s.takeTS()
+	if ts == nil {
+		return nil
 	}
-	return nil
+	return ts.Close()
 }
 
 // ResetState prepares the server for a restart by resetting the state machine.
 func (s *Server) ResetState() {
-	s.sm = NewStateMachine()
+	s.sm.Reset()
+}
+
+func (s *Server) setTS(ts *tsnet.Server) {
+	s.mu.Lock()
+	s.ts = ts
+	s.mu.Unlock()
+}
+
+func (s *Server) getTS() *tsnet.Server {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.ts
+}
+
+// clearTS drops ts when it is still the current node.
+func (s *Server) clearTS(ts *tsnet.Server) {
+	s.mu.Lock()
+	if s.ts == ts {
+		s.ts = nil
+	}
+	s.mu.Unlock()
+}
+
+func (s *Server) takeTS() *tsnet.Server {
+	s.mu.Lock()
+	ts := s.ts
+	s.ts = nil
+	s.mu.Unlock()
+	return ts
 }
 
 func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handler.WhoIsFunc) (handler.Handler, error) {
@@ -239,14 +273,14 @@ func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handl
 	}
 }
 
-func (s *Server) listenerFunc(tls, funnel bool) func(string, string) (net.Listener, error) {
+func listenerFunc(ts *tsnet.Server, tlsOn, funnel bool) func(string, string) (net.Listener, error) {
 	if funnel {
 		return func(network, addr string) (net.Listener, error) {
-			return s.ts.ListenFunnel(network, addr)
+			return ts.ListenFunnel(network, addr)
 		}
 	}
-	if tls {
-		return s.ts.ListenTLS
+	if tlsOn {
+		return ts.ListenTLS
 	}
-	return s.ts.Listen
+	return ts.Listen
 }

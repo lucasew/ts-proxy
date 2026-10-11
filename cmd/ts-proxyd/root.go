@@ -1,107 +1,67 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/lewtec/lewkit/x/cmd"
 	"github.com/lucasew/ts-proxy/pkg/config"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
-var cfgFile string
+var (
+	// ErrNoServers is returned when the config has no servers to run.
+	ErrNoServers = errors.New("no servers configured")
+	// ErrCLIFlags is returned when a command runs without the parsed flag bag.
+	ErrCLIFlags = errors.New("missing cli flags")
+)
 
-var rootCmd = &cobra.Command{
-	Use:   "ts-proxyd",
-	Short: "Tailscale reverse proxy server",
-	Long:  "ts-proxyd exposes services to a Tailnet (and optionally the Internet via Funnel) using Tailscale tsnet.",
-	// main prints a single "Error: …" line; avoid cobra duplicating it and
-	// dumping full usage on routine config mistakes (use --help for usage).
-	SilenceErrors: true,
-	SilenceUsage:  true,
+func flagsFrom(ctx context.Context) (cliFlags, error) {
+	flags, ok := cmd.Lookup[cliFlags](ctx, "cli")
+	if !ok {
+		return cliFlags{}, ErrCLIFlags
+	}
+	return flags, nil
 }
 
-func init() {
-	cobra.OnInitialize(initConfig)
-
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ./ts-proxy.yaml, then $XDG_CONFIG_HOME/ts-proxy/ or ~/.config/ts-proxy/, then /etc/ts-proxy/)")
-	rootCmd.PersistentFlags().String("state-dir", "", "base state directory (default /var/lib/ts-proxy)")
-	rootCmd.PersistentFlags().Bool("stop-on-fail", false, "stop all servers if any one fails")
-
-	if err := viper.BindPFlag("state_dir", rootCmd.PersistentFlags().Lookup("state-dir")); err != nil {
-		panic(fmt.Errorf("binding state-dir flag: %w", err))
-	}
-	if err := viper.BindPFlag("stop_on_fail", rootCmd.PersistentFlags().Lookup("stop-on-fail")); err != nil {
-		panic(fmt.Errorf("binding stop-on-fail flag: %w", err))
-	}
-}
-
-// defaultConfigPaths is the search order when --config is not set.
-// Viper uses the first ts-proxy.yaml it finds; put the working directory
-// first so a local file is not shadowed by /etc or the user config dir
-// (matches README and common CLI expectation).
-//
-// The user config dir is resolved with os.UserConfigDir (XDG_CONFIG_HOME on
-// Unix, %AppData% on Windows), not a hard-coded "$HOME/.config/..." string and
-// not UserHomeDir+"/.config". Hard-coded "$HOME/..." fails to expand on
-// Windows and ignores XDG_CONFIG_HOME when users keep config outside $HOME.
-func defaultConfigPaths() []string {
-	paths := []string{"."}
-	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
-		paths = append(paths, filepath.Join(dir, "ts-proxy"))
-	}
-	paths = append(paths, "/etc/ts-proxy")
-	return paths
-}
-
-// initConfig wires viper search paths and env bindings. Reading the file is
-// deferred to loadConfig so failures surface as normal cobra command errors
-// instead of os.Exit from OnInitialize.
-func initConfig() {
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		viper.SetConfigName("ts-proxy")
-		viper.SetConfigType("yaml")
-		for _, p := range defaultConfigPaths() {
-			viper.AddConfigPath(p)
-		}
-	}
-
-	viper.SetEnvPrefix("TS_PROXY")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-	viper.AutomaticEnv()
-}
-
-func loadConfig() (*config.Config, error) {
-	if err := viper.ReadInConfig(); err != nil {
-		var notFound viper.ConfigFileNotFoundError
-		if !errors.As(err, &notFound) {
-			// Explicit --config path missing, unreadable, or invalid YAML:
-			// this is a user-facing configuration error, not an unexpected
-			// runtime fault for ReportError.
-			return nil, fmt.Errorf("reading config file: %w", err)
-		}
-	} else {
-		slog.Info("using config file", "path", viper.ConfigFileUsed())
+func loadConfig(flags cliFlags) (*config.Config, error) {
+	path, err := resolveConfigPath(flags.ConfigFile.Value())
+	if err != nil {
+		return nil, err
 	}
 
 	var cfg config.Config
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
+	if path != "" {
+		slog.Info("using config file", "path", path)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading config file: %w", err)
+		}
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("parsing config: %w", err)
+		}
 	}
+
+	if flags.StateDir.ArgSet() {
+		cfg.StateDir = flags.StateDir.Value()
+	}
+	if flags.StopOnFail.ArgSet() {
+		cfg.StopOnFail = flags.StopOnFail.Value()
+	}
+	if flags.StatusListen.ArgSet() {
+		cfg.StatusListen = flags.StatusListen.Value()
+	}
+
 	// Defaults first so missing fields are filled before expansion runs.
 	cfg.SetDefaults()
 	if err := cfg.ExpandEnv(); err != nil {
 		return nil, fmt.Errorf("expanding environment variables: %w", err)
 	}
 	// ExpandEnv treats a set-but-empty env var as success and substitutes "".
-	// That can wipe values that only looked non-empty because they were
-	// "${VAR}" placeholders (e.g. state_dir: "${STATE_DIR}" with STATE_DIR=).
 	// Re-apply defaults so empty expansions fall back instead of shipping a
 	// blank state_dir / hostname / listen into Validate and runtime.
 	cfg.SetDefaults()
@@ -109,4 +69,45 @@ func loadConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("validating config: %w", err)
 	}
 	return &cfg, nil
+}
+
+// resolveConfigPath returns the YAML file to read.
+// An empty explicit path searches the default directories. No file is not an
+// error: loadConfig then applies defaults. An explicit path is returned as
+// given; loadConfig reports a missing file or a directory.
+func resolveConfigPath(explicit string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
+	}
+	for _, dir := range defaultConfigPaths() {
+		path := filepath.Join(dir, "ts-proxy.yaml")
+		info, err := os.Stat(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return "", fmt.Errorf("reading config file: %w", err)
+		}
+		if info.IsDir() {
+			continue
+		}
+		return path, nil
+	}
+	return "", nil
+}
+
+// defaultConfigPaths is the search order when --config is not set.
+// The working directory is first so a local file wins over /etc and the user
+// config dir.
+//
+// The user config dir comes from os.UserConfigDir (XDG_CONFIG_HOME on Unix,
+// %AppData% on Windows). A hard-coded "$HOME/.config" path does not expand on
+// Windows and ignores XDG_CONFIG_HOME.
+func defaultConfigPaths() []string {
+	paths := []string{"."}
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		paths = append(paths, filepath.Join(dir, "ts-proxy"))
+	}
+	paths = append(paths, "/etc/ts-proxy")
+	return paths
 }
