@@ -36,8 +36,9 @@ func (root) Description() string {
 }
 
 type cliFlags struct {
-	ConfigFile   cmd.StringArg `long:"config" help:"config file (default: ./ts-proxy.yaml, then the user config directory, then /etc/ts-proxy/)" default:""`
-	StateDir     cmd.StringArg `long:"state-dir" help:"base state directory (default /var/lib/ts-proxy)" env:"TS_PROXY_STATE_DIR" default:""`
-	StopOnFail   cmd.Flag      `long:"stop-on-fail" help:"stop all servers if any one fails" env:"TS_PROXY_STOP_ON_FAIL"`
-	StatusListen cmd.StringArg `long:"status-listen" help:"status page and /health listen address (default 127.0.0.1:8090)" env:"TS_PROXY_STATUS_LISTEN" default:""`
+	ConfigFile cmd.StringArg `long:"config" help:"config file (default: ./ts-proxy.yaml, then the user config directory, then /etc/ts-proxy/)" default:""`
+	StateDir   cmd.StringArg `long:"state-dir" help:"base state directory (default /var/lib/ts-proxy)" env:"TS_PROXY_STATE_DIR" default:""`
+	StopOnFail cmd.Flag      `long:"stop-on-fail" help:"stop all servers if any one fails" env:"TS_PROXY_STOP_ON_FAIL"`
+	// default matches config.DefaultStatusListen. A struct tag cannot name the const.
+	StatusListen cmd.AddrArg `long:"status-listen" help:"status page and /health listen address" env:"TS_PROXY_STATUS_LISTEN" default:"127.0.0.1:8090"`
 }

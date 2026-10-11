@@ -189,6 +189,30 @@ servers:
 	}
 }
 
+func TestStatusListenAddrArg(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "ts-proxy.yaml")
+	if err := os.WriteFile(cfgPath, []byte("status_listen: \"127.0.0.1:1\"\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	got, err := cmd.Parse[root]("--config", cfgPath, "--status-listen", "8090")
+	if err != nil {
+		t.Fatalf("parse bare port: %v", err)
+	}
+	cfg, err := loadConfig(got.Flags)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if cfg.StatusListen != ":8090" {
+		t.Fatalf("StatusListen = %q, want :8090", cfg.StatusListen)
+	}
+
+	_, err = cmd.Parse[root]("--status-listen", "nope")
+	if !errors.Is(err, cmd.ErrInvalidArgument) {
+		t.Fatalf("parse err = %v, want ErrInvalidArgument", err)
+	}
+}
+
 func TestLoadConfigRejectsBadStatusListen(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "ts-proxy.yaml")

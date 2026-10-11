@@ -66,7 +66,7 @@ Global flags (available to all commands):
   `/etc/ts-proxy/`.
 - `--state-dir` – base directory for Tailscale state (overwrites the value in the config file).
 - `--stop-on-fail` – if any server fails, stop the whole process (instead of restarting the failed one).
-- `--status-listen` – status listener address. Default `127.0.0.1:8090`.
+- `--status-listen` – status listener address. Default `127.0.0.1:8090`. A bare port listens on every interface (`8090` means `:8090`).
 
 `ts-proxyd server --help` lists `--dry-run`. `-h` / `--help` prints help, `--version` prints the build version, and `-v` raises log verbosity. Those flags come from lewkit.
 
