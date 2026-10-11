@@ -2,6 +2,9 @@ package server
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStateMachineValidTransitions(t *testing.T) {
@@ -40,8 +43,8 @@ func TestStateMachineValidTransitions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sm := NewStateMachine()
 			for i, to := range tt.transitions {
-				if err := sm.Transition(to); err != nil {
-					t.Errorf("transition %d (%s -> %s): %v", i, sm.Current(), to, err)
+				err := sm.Transition(to)
+				if !assert.NoError(t, err, "transition %d (%s -> %s)", i, sm.Current(), to) {
 					return
 				}
 			}
@@ -87,31 +90,31 @@ func TestStateMachineInvalidTransitions(t *testing.T) {
 			}
 
 			err := sm.Transition(tt.to)
-			if err == nil {
-				t.Errorf("expected error for %s -> %s, got nil", tt.from, tt.to)
-			}
+			assert.Error(t, err, "expected error for %s -> %s", tt.from, tt.to)
 		})
 	}
 }
 
+func TestStateMachineReset(t *testing.T) {
+	sm := NewStateMachine()
+	require.NoError(t, sm.Transition(StateStarting))
+	sm.Reset()
+	require.Equal(t, StateInit, sm.Current())
+	require.NoError(t, sm.Transition(StateStarting))
+}
+
 func TestStateMachineConcurrent(t *testing.T) {
 	sm := NewStateMachine()
-	if err := sm.Transition(StateStarting); err != nil {
-		t.Fatalf("Transition Starting: %v", err)
-	}
-	if err := sm.Transition(StateRunning); err != nil {
-		t.Fatalf("Transition Running: %v", err)
-	}
+	require.NoError(t, sm.Transition(StateStarting))
+	require.NoError(t, sm.Transition(StateRunning))
 
 	done := make(chan State, 100)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		go func() {
 			done <- sm.Current()
 		}()
 	}
-	for i := 0; i < 100; i++ {
-		if got := <-done; got != StateRunning {
-			t.Errorf("Current() = %s, want %s", got, StateRunning)
-		}
+	for range 100 {
+		assert.Equal(t, StateRunning, <-done)
 	}
 }

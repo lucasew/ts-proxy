@@ -22,7 +22,7 @@ Non-goals (this version):
 - Funnel on ports other than the Tailscale Funnel set
 - Preserving the tailnet peer address on the upstream socket
 
-Tree-bound: `cmd/ts-proxyd`, `pkg/config`, `pkg/server`, `pkg/handler`, `example-config.yaml`.
+Tree-bound: `cmd/ts-proxyd`, `pkg/config`, `pkg/server`, `pkg/handler`, `pkg/status`, `example-config.yaml`.
 
 ## Technique
 
@@ -31,6 +31,7 @@ Tree-bound: `cmd/ts-proxyd`, `pkg/config`, `pkg/server`, `pkg/handler`, `example
 | TEC-1 | YAML server + auth | One `tsnet.Server` per server slug, state under `state_dir/<slug>` | A tailnet node named `hostname` |
 | TEC-2 | Handler `listen` + `upstream_address` | `Listen` / `ListenTLS` / `ListenFunnel` then splice or HTTP reverse proxy | Port-specific publish |
 | TEC-3 | Server `forward` host | `RegisterFallbackTCPHandler` after listeners; dest port N dials `forward:N` | Unmatched inbound TCP published |
+| TEC-4 | `status_listen` | Plain HTTP outside tsnet. `GET /` and `GET /health` | Server state and handler upstream availability |
 
 TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners always win.
 
@@ -39,7 +40,8 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 | Technique | Relation | Cite |
 |-----------|----------|------|
 | TEC-1, TEC-2, TEC-3 | adopt | `tailscale.com/tsnet` v1.102.3 |
-| YAML + flags + env | adopt | cobra, viper |
+| TEC-4 | adopt | `github.com/a-h/templ` page, `sakuracss.Load` |
+| YAML + flags + env | adopt | `github.com/lewtec/lewkit/x/cmd` |
 | HTTP reverse proxy + WhoIs headers | implement | `pkg/handler/http.go` (same header set as Tailscale serve / tclip) |
 | TCP splice | implement | `pkg/handler/tcp.go` |
 
@@ -51,6 +53,7 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 | Port-specific publish | handler | route, mapping, endpoint |
 | Host for unmatched TCP | forward | wrap, dest IP, catch-all, proxy_to |
 | Inbound dest port reused on forward | dest port | published port, listen port (that name is the handler bind) |
+| Loopback HTTP for `/` and `/health` | status listener | handler, admin API |
 
 ## Types
 
@@ -65,9 +68,9 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 
 | Command | Type it mutates | Transition | Bad input |
 |---------|-----------------|------------|-----------|
-| `ts-proxyd server` | each `Server` | start → authenticate → run | load/validate fail: exit 1, no nodes left running |
+| `ts-proxyd server` | each `Server` | start → authenticate → run. Also bind the status listener before any server starts | load/validate fail: exit 1, no nodes left running. Status bind fail: exit 1, no nodes left running |
 | `ts-proxyd config` | none | print resolved YAML | same load/validate fail: exit 1 |
-| `ts-proxyd server --dry-run` | each `Server` (auth only) | start then close | start fail: close earlier successes, exit 1 |
+| `ts-proxyd server --dry-run` | each `Server` (auth only) | start then close. Do not bind the status listener | start fail: close earlier successes, exit 1 |
 
 ## Invariants
 
@@ -81,12 +84,14 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 - INV-8 `forward` MUST NOT accept UDP or non-TCP IP protocols.
 - INV-9 Funnel MUST exist only through an explicit handler (`ListenFunnel`).
 - INV-10 HTTP handlers MUST add Tailscale WhoIs headers. TCP splice and `forward` MUST NOT invent those headers.
+- INV-11 The status listener MUST be plain HTTP on `status_listen` (default `127.0.0.1:8090`). It MUST NOT use tsnet `Listen`, `ListenTLS`, or `ListenFunnel`. `GET /health` MUST return 200 only when every server state is `running`, and 503 otherwise. `GET /` MUST show each server state and each handler upstream availability. `GET /events` MUST push a server-sent event when a server changes state. `--dry-run` MUST NOT bind it. An empty `status_listen` before defaults is filled. After defaults, a value that is not `host:port` MUST fail `Validate`.
 
 ## Errors
 
 | Operation | Bad input | Reaction |
 |-----------|-----------|----------|
 | `Config.Validate` | `forward` contains a port | `ErrForwardHostOnly`, load fails |
+| `Config.Validate` | `status_listen` is not host:port | `ErrStatusListen`, load fails |
 | `Config.Validate` | unknown handler type | `ErrUnknownHandlerType` |
 | `Config.Validate` | handler missing listen/upstream | `ErrListenRequired` / `ErrUpstreamRequired` |
 | `Config.ExpandEnv` | `${UNSET}` | `ErrUndefinedEnvVar` |
@@ -99,6 +104,10 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 - The same server with a handler on `:80` still serves that handler on port 80.
 - Omitting `forward` leaves unmatched ports closed.
 - `ts-proxyd config` prints the resolved `forward` value.
+- `GET /health` on `127.0.0.1:8090` returns 200 when every server is `running`, and the page at `/` shows that state.
+- `GET /events` pushes an update when a server changes state.
+- While a server is authenticating, the page shows its Tailscale login link.
+- `ts-proxyd config` prints the resolved `status_listen` value.
 
 ## Later work
 

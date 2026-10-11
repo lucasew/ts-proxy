@@ -7,7 +7,10 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync/atomic"
+	"time"
 
+	"github.com/lewtec/lewkit/x/event"
 	"github.com/lucasew/ts-proxy/pkg/config"
 	"github.com/lucasew/ts-proxy/pkg/handler"
 	"github.com/lucasew/ts-proxy/pkg/tsproxy"
@@ -33,10 +36,12 @@ type Options struct {
 
 // Server manages a single Tailscale node and its handlers.
 type Server struct {
-	name string
-	opts Options
-	sm   *StateMachine
-	ts   *tsnet.Server
+	name    string
+	opts    Options
+	sm      *StateMachine
+	ts      currentTS
+	bus     *event.Bus[struct{}]
+	authURL atomic.Pointer[string]
 }
 
 // NewServer creates a server from options.
@@ -61,8 +66,8 @@ func (s *Server) State() State {
 // FQDN returns the fully qualified domain name after authentication,
 // falling back to the configured hostname.
 func (s *Server) FQDN() string {
-	if s.ts != nil {
-		for _, domain := range s.ts.CertDomains() {
+	if ts := s.ts.get(); ts != nil {
+		for _, domain := range ts.CertDomains() {
 			return domain
 		}
 	}
@@ -74,6 +79,59 @@ func (s *Server) FQDN() string {
 func (s *Server) mustTransition(to State) {
 	if err := s.sm.Transition(to); err != nil {
 		slog.Warn("state transition rejected", "server", s.name, "to", to, "current", s.sm.Current(), "err", err)
+		return
+	}
+	s.publishStatus()
+}
+
+func (s *Server) publishStatus() {
+	if s.bus != nil {
+		s.bus.PublishKeep(struct{}{})
+	}
+}
+
+// AuthURL is the Tailscale login link while this node still needs a user.
+// It is empty once the node is authenticated, and before Tailscale has a link.
+func (s *Server) AuthURL() string {
+	if cur := s.authURL.Load(); cur != nil {
+		return *cur
+	}
+	return ""
+}
+
+func (s *Server) setAuthURL(url string) {
+	if cur := s.authURL.Load(); cur != nil && *cur == url {
+		return
+	}
+	if url == "" && s.authURL.Load() == nil {
+		return
+	}
+	s.authURL.Store(&url)
+	s.publishStatus()
+}
+
+// collectAuthURL polls Tailscale until ctx ends and publishes when the login link changes.
+// LocalClient waits until Start finishes, so this must not run on the status request path.
+func (s *Server) collectAuthURL(ctx context.Context, ts *tsnet.Server) {
+	lc, err := ts.LocalClient()
+	if err != nil || ctx.Err() != nil {
+		return
+	}
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		st, err := lc.Status(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil && st != nil {
+			s.setAuthURL(st.AuthURL)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -86,24 +144,30 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("create state dir %s: %w", s.opts.StateDir, err)
 	}
 
-	s.ts = &tsnet.Server{
+	ts := &tsnet.Server{
 		Hostname: s.opts.Hostname,
 		Dir:      s.opts.StateDir,
 	}
 	if s.opts.AuthKey != "" {
-		s.ts.AuthKey = s.opts.AuthKey
+		ts.AuthKey = s.opts.AuthKey
 	}
+	s.ts.set(ts)
 
 	s.mustTransition(StateAuthenticating)
 	slog.Info("authenticating", "server", s.name)
+	authCtx, stopAuth := context.WithCancel(ctx)
+	defer stopAuth()
+	go s.collectAuthURL(authCtx, ts)
 
-	_, err := s.ts.Up(ctx)
+	_, err := ts.Up(ctx)
+	stopAuth()
+	s.setAuthURL("")
 	if err != nil {
 		s.mustTransition(StateFailed)
-		if cerr := s.ts.Close(); cerr != nil {
+		if cerr := ts.Close(); cerr != nil {
 			tsproxy.ReportError(cerr, "context", "tailscale close error")
 		}
-		s.ts = nil
+		s.ts.clear(ts)
 		return fmt.Errorf("tailscale up: %w", err)
 	}
 
@@ -113,11 +177,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Serve starts all handlers. Must be called after Start.
 func (s *Server) Serve(ctx context.Context) error {
-	if s.ts == nil {
+	ts := s.ts.get()
+	if ts == nil {
 		return ErrNotStarted
 	}
 
-	lc, err := s.ts.LocalClient()
+	lc, err := ts.LocalClient()
 	if err != nil {
 		s.mustTransition(StateFailed)
 		return fmt.Errorf("local client: %w", err)
@@ -134,7 +199,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	if s.opts.Forward != "" {
 		fwd := handler.NewTCP("tcp", s.opts.Forward)
-		unreg := s.ts.RegisterFallbackTCPHandler(forwardFallback{
+		unreg := ts.RegisterFallbackTCPHandler(forwardFallback{
 			ctx:  gCtx,
 			name: s.name,
 			host: s.opts.Forward,
@@ -154,7 +219,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				return fmt.Errorf("create handler %s %s: %w", hc.Type, hc.Listen, err)
 			}
 
-			lf := s.listenerFunc(hc.TLS, hc.Funnel)
+			lf := listenerFunc(ts, hc.TLS, hc.Funnel)
 			ln, err := lf("tcp", hc.Listen)
 			if err != nil {
 				return fmt.Errorf("listen %s: %w", hc.Listen, err)
@@ -207,18 +272,35 @@ func (s *Server) Run(ctx context.Context) error {
 
 // Close shuts down the Tailscale node.
 func (s *Server) Close() error {
-	if s.ts != nil {
-		err := s.ts.Close()
-		s.ts = nil
-		return err
+	ts := s.ts.take()
+	if ts == nil {
+		return nil
 	}
-	return nil
+	return ts.Close()
 }
 
 // ResetState prepares the server for a restart by resetting the state machine.
 func (s *Server) ResetState() {
-	s.sm = NewStateMachine()
+	s.sm.Reset()
+	s.publishStatus()
 }
+
+// currentTS publishes the live tsnet node.
+// set, get, clear, and take are atomic so a status snapshot can read the
+// node while Start or Close swaps it.
+type currentTS struct {
+	p atomic.Pointer[tsnet.Server]
+}
+
+func (c *currentTS) set(ts *tsnet.Server) { c.p.Store(ts) }
+
+func (c *currentTS) get() *tsnet.Server { return c.p.Load() }
+
+// clear forgets ts when it is still the published node.
+func (c *currentTS) clear(ts *tsnet.Server) { c.p.CompareAndSwap(ts, nil) }
+
+// take removes the published node and returns it.
+func (c *currentTS) take() *tsnet.Server { return c.p.Swap(nil) }
 
 func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handler.WhoIsFunc) (handler.Handler, error) {
 	switch hc.Type {
@@ -239,14 +321,14 @@ func (s *Server) createHandler(hc config.HandlerConfig, fqdn string, whoIs handl
 	}
 }
 
-func (s *Server) listenerFunc(tls, funnel bool) func(string, string) (net.Listener, error) {
+func listenerFunc(ts *tsnet.Server, tlsOn, funnel bool) func(string, string) (net.Listener, error) {
 	if funnel {
 		return func(network, addr string) (net.Listener, error) {
-			return s.ts.ListenFunnel(network, addr)
+			return ts.ListenFunnel(network, addr)
 		}
 	}
-	if tls {
-		return s.ts.ListenTLS
+	if tlsOn {
+		return ts.ListenTLS
 	}
-	return s.ts.Listen
+	return ts.Listen
 }

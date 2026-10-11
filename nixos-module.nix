@@ -14,6 +14,7 @@ let
   configContent = {
     state_dir = "/data";
     stop_on_fail = cfg.stopOnFail;
+    status_listen = cfg.statusListen;
 
     tokens = lib.mapAttrs (
       name: tok: {
@@ -89,6 +90,12 @@ in
         description = "Stop all servers if any one fails";
         type = lib.types.bool;
         default = false;
+      };
+
+      statusListen = lib.mkOption {
+        description = "Loopback address for the status page and /health";
+        type = lib.types.str;
+        default = "127.0.0.1:8090";
       };
 
       serviceName = lib.mkOption {

@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lewtec/lewkit/x/event"
 	"github.com/lucasew/ts-proxy/internal/ctxwait"
 	"github.com/lucasew/ts-proxy/pkg/config"
+	"github.com/lucasew/ts-proxy/pkg/status"
 	"github.com/lucasew/ts-proxy/pkg/tsproxy"
 )
 
@@ -21,10 +23,12 @@ const restartDelay = 5 * time.Second
 type Supervisor struct {
 	cfg     *config.Config
 	servers []*Server
+	bus     *event.Bus[struct{}]
 }
 
 // NewSupervisor creates a supervisor from a validated config.
 func NewSupervisor(cfg *config.Config) *Supervisor {
+	bus := event.New[struct{}]()
 	var servers []*Server
 	for _, name := range cfg.ServerNames() {
 		scfg := cfg.Servers[name]
@@ -42,11 +46,13 @@ func NewSupervisor(cfg *config.Config) *Supervisor {
 			Forward:  scfg.Forward,
 			Handlers: scfg.Handlers,
 		})
+		srv.bus = bus
 		servers = append(servers, srv)
 	}
 	return &Supervisor{
 		cfg:     cfg,
 		servers: servers,
+		bus:     bus,
 	}
 }
 
@@ -100,9 +106,37 @@ func (s *Supervisor) DisplayAuthenticated() string {
 	return config.FormatHandlerSections(sections)
 }
 
+// Snapshot copies the current server state for the status listener.
+func (s *Supervisor) Snapshot() []status.Server {
+	out := make([]status.Server, 0, len(s.servers))
+	for _, srv := range s.servers {
+		handlers := make([]status.Handler, len(srv.opts.Handlers))
+		for i, h := range srv.opts.Handlers {
+			handlers[i] = status.Handler{
+				Type:     h.Type,
+				Listen:   h.Listen,
+				Upstream: h.UpstreamAddress,
+				Network:  h.UpstreamNetwork,
+			}
+		}
+		out = append(out, status.Server{
+			Name:     srv.Name(),
+			State:    string(srv.State()),
+			FQDN:     srv.FQDN(),
+			Forward:  srv.opts.Forward,
+			AuthURL:  srv.AuthURL(),
+			Handlers: handlers,
+		})
+	}
+	return out
+}
+
 // Run starts all servers and supervises them.
 // If StopOnFail is true, any server failure stops all servers.
 // Otherwise, failed servers are restarted with a delay.
+// When StatusListen is set, Run also serves the status listener until ctx ends.
+// The listener is bound before any server starts. A bind error returns without
+// leaving nodes up. The status goroutine exits when ctx is canceled.
 func (s *Supervisor) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -110,20 +144,35 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	var firstErr error
 	var errOnce sync.Once
+	fail := func(err error) {
+		errOnce.Do(func() {
+			firstErr = err
+			cancel()
+		})
+	}
+
+	if addr := s.cfg.StatusListen; addr != "" {
+		ln, err := status.Listen(addr)
+		if err != nil {
+			return err
+		}
+		slog.Info("status listener", "addr", ln.Addr().String())
+		wg.Go(func() {
+			// Serve closes ln. A canceled ctx is a clean stop.
+			err := status.Serve(ctx, ln, s.Snapshot, s.bus)
+			if err != nil && ctx.Err() == nil {
+				fail(err)
+			}
+		})
+	}
 
 	for _, srv := range s.servers {
-		srv := srv
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			err := s.runWithRestart(ctx, srv)
 			if err != nil {
-				errOnce.Do(func() {
-					firstErr = err
-					cancel()
-				})
+				fail(err)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

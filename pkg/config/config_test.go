@@ -1,10 +1,12 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateSlug(t *testing.T) {
@@ -29,9 +31,11 @@ func TestValidateSlug(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.slug, func(t *testing.T) {
 			err := ValidateSlug(tt.slug)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateSlug(%q) error = %v, wantErr %v", tt.slug, err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
 			}
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -186,18 +190,10 @@ func TestConfigValidate(t *testing.T) {
 			tt.modify(&cfg)
 			err := cfg.Validate()
 			if tt.wantErr == nil {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				assert.NoError(t, err)
 				return
 			}
-			if err == nil {
-				t.Errorf("expected %v, got nil", tt.wantErr)
-				return
-			}
-			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("expected errors.Is(..., %v), got %v", tt.wantErr, err)
-			}
+			assert.ErrorIs(t, err, tt.wantErr)
 		})
 	}
 }
@@ -216,29 +212,15 @@ func TestSetDefaults(t *testing.T) {
 	}
 	cfg.SetDefaults()
 
-	if cfg.StateDir != "/var/lib/ts-proxy" {
-		t.Errorf("StateDir = %q, want /var/lib/ts-proxy", cfg.StateDir)
-	}
+	assert.Equal(t, "/var/lib/ts-proxy", cfg.StateDir)
+	assert.Equal(t, DefaultStatusListen, cfg.StatusListen)
 
 	srv := cfg.Servers["myapp"]
-	if srv.Hostname != "myapp" {
-		t.Errorf("Hostname = %q, want myapp", srv.Hostname)
-	}
-
-	if srv.Handlers[0].Listen != ":80" {
-		t.Errorf("HTTP handler listen = %q, want :80", srv.Handlers[0].Listen)
-	}
-	if srv.Handlers[0].UpstreamNetwork != "tcp" {
-		t.Errorf("HTTP handler upstream_network = %q, want tcp", srv.Handlers[0].UpstreamNetwork)
-	}
-
-	if srv.Handlers[1].Listen != ":443" {
-		t.Errorf("HTTPS handler listen = %q, want :443", srv.Handlers[1].Listen)
-	}
-
-	if srv.Handlers[2].Listen != ":2222" {
-		t.Errorf("TCP handler listen = %q, want :2222", srv.Handlers[2].Listen)
-	}
+	assert.Equal(t, "myapp", srv.Hostname)
+	assert.Equal(t, ":80", srv.Handlers[0].Listen)
+	assert.Equal(t, "tcp", srv.Handlers[0].UpstreamNetwork)
+	assert.Equal(t, ":443", srv.Handlers[1].Listen)
+	assert.Equal(t, ":2222", srv.Handlers[2].Listen)
 }
 
 func TestExpandEnv(t *testing.T) {
@@ -250,54 +232,32 @@ func TestExpandEnv(t *testing.T) {
 			"literal": {AuthKey: "tskey-literal"},
 		},
 	}
-	if err := cfg.ExpandEnv(); err != nil {
-		t.Fatalf("ExpandEnv failed: %v", err)
-	}
-
-	if cfg.Tokens["default"].AuthKey != "tskey-test-value" {
-		t.Errorf("default auth_key = %q, want tskey-test-value", cfg.Tokens["default"].AuthKey)
-	}
-	if cfg.Tokens["literal"].AuthKey != "tskey-literal" {
-		t.Errorf("literal auth_key = %q, want tskey-literal", cfg.Tokens["literal"].AuthKey)
-	}
+	require.NoError(t, cfg.ExpandEnv())
+	assert.Equal(t, "tskey-test-value", cfg.Tokens["default"].AuthKey)
+	assert.Equal(t, "tskey-literal", cfg.Tokens["literal"].AuthKey)
 }
 
 func TestExpandEnvForward(t *testing.T) {
 	t.Setenv("TEST_FORWARD_HOST", "127.0.0.2")
 	cfg := validConfig()
 	withWeb(&cfg, func(srv *ServerConfig) { srv.Forward = "${TEST_FORWARD_HOST}" })
-	if err := cfg.ExpandEnv(); err != nil {
-		t.Fatalf("ExpandEnv: %v", err)
-	}
-	if got := cfg.Servers["web"].Forward; got != "127.0.0.2" {
-		t.Fatalf("forward = %q, want 127.0.0.2", got)
-	}
+	require.NoError(t, cfg.ExpandEnv())
+	require.Equal(t, "127.0.0.2", cfg.Servers["web"].Forward)
 }
 
 func TestDisplayStringForward(t *testing.T) {
 	cfg := validConfig()
 	withWeb(&cfg, func(srv *ServerConfig) { srv.Forward = "127.0.0.2" })
-	s := cfg.DisplayString()
-	if !strings.Contains(s, "[forward: 127.0.0.2]") {
-		t.Fatalf("DisplayString missing forward: %q", s)
-	}
+	require.Contains(t, cfg.DisplayString(), "[forward: 127.0.0.2]")
 }
 
 func TestDisplayString(t *testing.T) {
 	cfg := validConfig()
 	s := cfg.DisplayString()
-	if !strings.Contains(s, "web") {
-		t.Error("DisplayString should contain server name")
-	}
-	if !strings.Contains(s, ":80") {
-		t.Error("DisplayString should contain listen address")
-	}
-	if !strings.Contains(s, "HTTP") {
-		t.Error("DisplayString should contain handler type")
-	}
-	if !strings.Contains(s, "localhost:8080") {
-		t.Error("DisplayString should contain upstream address")
-	}
+	assert.Contains(t, s, "web")
+	assert.Contains(t, s, ":80")
+	assert.Contains(t, s, "HTTP")
+	assert.Contains(t, s, "localhost:8080")
 }
 
 // Regression: TCP handler with no listen after defaults should fail validation
@@ -315,55 +275,35 @@ func TestTCPHandlerNoListenDefault(t *testing.T) {
 	cfg.SetDefaults()
 
 	// TCP handlers should NOT get a default listen address
-	if cfg.Servers["myapp"].Handlers[0].Listen != "" {
-		t.Errorf("TCP handler should not get default listen, got %q", cfg.Servers["myapp"].Handlers[0].Listen)
-	}
-
-	// Validation should catch it
+	assert.Empty(t, cfg.Servers["myapp"].Handlers[0].Listen)
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected validation error for TCP handler without listen")
-	}
-	if !errors.Is(err, ErrListenRequired) {
-		t.Errorf("expected ErrListenRequired, got %v", err)
-	}
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrListenRequired)
 }
 
 // ExpandEnv must error when a referenced variable is not set (prevents
 // silent empty auth keys in automated/container environments).
 func TestExpandEnvUnset(t *testing.T) {
-	if err := os.Unsetenv("DEFINITELY_NOT_SET_12345"); err != nil {
-		t.Fatalf("failed to unset env var: %v", err)
-	}
+	require.NoError(t, os.Unsetenv("DEFINITELY_NOT_SET_12345"))
 	cfg := Config{
 		Tokens: map[string]TokenConfig{
 			"default": {AuthKey: "${DEFINITELY_NOT_SET_12345}"},
 		},
 	}
 	err := cfg.ExpandEnv()
-	if err == nil {
-		t.Fatal("expected error when auth_key references an unset environment variable")
-	}
-	if !errors.Is(err, ErrUndefinedEnvVar) {
-		t.Errorf("expected ErrUndefinedEnvVar, got: %v", err)
-	}
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrUndefinedEnvVar)
 	// Diagnostic context (field path + var name) stays in the message.
 	msg := err.Error()
-	if !strings.Contains(msg, "DEFINITELY_NOT_SET_12345") {
-		t.Errorf("error should mention the missing variable name, got: %v", err)
-	}
-	if !strings.Contains(msg, "token \"default\"") {
-		t.Errorf("error should mention the token name, got: %v", err)
-	}
+	assert.Contains(t, msg, "DEFINITELY_NOT_SET_12345")
+	assert.Contains(t, msg, "token \"default\"")
 }
 
 // Regression: empty config should pass validation (no servers is valid config)
 func TestEmptyConfigValidation(t *testing.T) {
 	cfg := Config{}
 	cfg.SetDefaults()
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("empty config should be valid, got: %v", err)
-	}
+	assert.NoError(t, cfg.Validate())
 }
 
 // Regression: multiple servers sharing the same token
@@ -385,9 +325,7 @@ func TestMultipleServersOneToken(t *testing.T) {
 		},
 	}
 	cfg.SetDefaults()
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("multiple servers sharing one token should be valid, got: %v", err)
-	}
+	assert.NoError(t, cfg.Validate())
 }
 
 // Regression: handler with funnel but not TLS should still default listen to
@@ -405,12 +343,8 @@ func TestFunnelDefaultsTo443(t *testing.T) {
 	cfg.SetDefaults()
 
 	h := cfg.Servers["myapp"].Handlers[0]
-	if h.Listen != ":443" {
-		t.Errorf("funnel handler should default to :443, got %q", h.Listen)
-	}
-	if !h.TLS {
-		t.Error("funnel handler should imply tls: true after SetDefaults")
-	}
+	assert.Equal(t, ":443", h.Listen)
+	assert.True(t, h.TLS)
 }
 
 // Funnel without an explicit tls flag must still surface as TLS in display
@@ -428,12 +362,8 @@ func TestFunnelImpliesTLSInDisplay(t *testing.T) {
 	}
 	cfg.SetDefaults()
 	s := cfg.DisplayString()
-	if !strings.Contains(s, "TLS") {
-		t.Errorf("DisplayString after funnel-only config should show TLS, got %q", s)
-	}
-	if !strings.Contains(s, "Funnel") {
-		t.Errorf("DisplayString after funnel-only config should show Funnel, got %q", s)
-	}
+	assert.Contains(t, s, "TLS")
+	assert.Contains(t, s, "Funnel")
 }
 
 // Regression: DisplayString includes TLS and Funnel flags
@@ -449,12 +379,8 @@ func TestDisplayStringFlags(t *testing.T) {
 		},
 	}
 	s := cfg.DisplayString()
-	if !strings.Contains(s, "TLS") {
-		t.Error("DisplayString should show TLS flag")
-	}
-	if !strings.Contains(s, "Funnel") {
-		t.Error("DisplayString should show Funnel flag")
-	}
+	assert.Contains(t, s, "TLS")
+	assert.Contains(t, s, "Funnel")
 }
 
 func TestFormatHandlerSectionsAlignsColumns(t *testing.T) {
@@ -467,15 +393,10 @@ func TestFormatHandlerSectionsAlignsColumns(t *testing.T) {
 		}},
 	})
 	// Widths are global: ":80" pads to len(":8443"), "HTTP" pads to len("HTTP+TLS").
-	if !strings.Contains(got, "  :80   HTTP     -> localhost:8080") {
-		t.Fatalf("short listen not padded to global width:\n%s", got)
-	}
-	if !strings.Contains(got, "  :8443 HTTP+TLS -> localhost:3000") {
-		t.Fatalf("missing second handler line:\n%s", got)
-	}
-	if !strings.HasPrefix(got, "web\n") || !strings.Contains(got, "api\n") {
-		t.Fatalf("missing section headers:\n%s", got)
-	}
+	require.Contains(t, got, "  :80   HTTP     -> localhost:8080")
+	require.Contains(t, got, "  :8443 HTTP+TLS -> localhost:3000")
+	require.True(t, strings.HasPrefix(got, "web\n"), "got:\n%s", got)
+	require.Contains(t, got, "api\n")
 }
 
 func TestServerNames(t *testing.T) {
@@ -487,10 +408,6 @@ func TestServerNames(t *testing.T) {
 		},
 	}
 	names := cfg.ServerNames()
-	if len(names) != 3 {
-		t.Fatalf("expected 3 names, got %d", len(names))
-	}
-	if names[0] != "alpha" || names[1] != "bravo" || names[2] != "charlie" {
-		t.Errorf("expected sorted names, got %v", names)
-	}
+	require.Len(t, names, 3)
+	assert.Equal(t, []string{"alpha", "bravo", "charlie"}, names)
 }

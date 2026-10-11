@@ -41,10 +41,10 @@ they can change all the headers they want, including authentication ones.
 
 ## Usage
 
-The CLI uses subcommands (powered by Cobra + Viper).
+The CLI is [lewkit x/cmd](https://github.com/lewtec/lewkit). Subcommands are `server` and `config`.
 
 ```bash
-# Show all commands and global flags
+# Show commands and flags
 ts-proxyd --help
 
 # Start the proxy (all servers defined in the config)
@@ -54,20 +54,39 @@ ts-proxyd server --config /etc/ts-proxy/config.yaml
 # server structure, then exit without serving traffic.
 ts-proxyd server --dry-run --config config.yaml
 
-# Print the fully resolved configuration (very useful for debugging
-# env expansion, defaults, and validation errors).
+# Print the resolved configuration after defaults and env expansion.
 ts-proxyd config --config config.yaml
 ```
 
 Global flags (available to all commands):
 
 - `--config` – path to the YAML config file. If omitted, ts-proxyd looks for
-  `ts-proxy.yaml` in the current directory, `$HOME/.config/ts-proxy/`, and
+  `ts-proxy.yaml` in the current directory, the user config directory
+  (`os.UserConfigDir`/ts-proxy, which follows `XDG_CONFIG_HOME` on Unix), and
   `/etc/ts-proxy/`.
 - `--state-dir` – base directory for Tailscale state (overwrites the value in the config file).
 - `--stop-on-fail` – if any server fails, stop the whole process (instead of restarting the failed one).
+- `--status-listen` – status listener address. Default `127.0.0.1:8090`. A bare port listens on every interface (`8090` means `:8090`).
 
-See `ts-proxyd server --help` for the `--dry-run` flag.
+`ts-proxyd server --help` lists `--dry-run`. `-h` / `--help` prints help, `--version` prints the build version, and `-v` raises log verbosity. Those flags come from lewkit.
+
+## Status listener
+
+`ts-proxyd server` binds `status_listen` before it starts any Tailscale node. `--dry-run` does not bind it.
+
+Open `http://127.0.0.1:8090/` for a page that lists each server. The page shows the lifecycle state (`init`, `starting`, `authenticating`, `running`, `failed`, `stopped`), the hostname, `forward` when set, and each handler. Handler rows include a TCP dial result: `up`, `down`, or `unchecked` (UDP). The page is a [templ](https://templ.guide) component. It loads [Sakura CSS](https://github.com/oxalorg/sakura) with `sakuracss.Load`. Each state and each availability has an icon beside the word.
+
+The page keeps a server-sent stream at `/events`. The stream pushes a lifecycle change at once. The stream checks handler availability every 5 seconds.
+
+While a server still needs a user, the page shows that server's Tailscale login link. The link disappears after authentication.
+
+`GET /health` returns JSON. The status is `200` when every server is `running`. Any other state returns `503`. The body lists each server and handler either way.
+
+```bash
+curl -sS http://127.0.0.1:8090/health
+```
+
+Keep `status_listen` on a loopback address. The page shows upstream addresses. Set `status_listen` in YAML, or override it with `--status-listen` or `TS_PROXY_STATUS_LISTEN`.
 
 ## Configuration
 
@@ -130,7 +149,7 @@ A server with no handlers and no `forward` is valid. The node stays on the tailn
 - Each server gets its own subdirectory under `state_dir/<server-name>`.
 - `auth_key` values containing `${VAR}` are expanded at load time using the process environment.
 - The `config` subcommand shows you exactly what will be used after defaults are applied and variables expanded.
-- You can override `state_dir` and `stop_on_fail` from the command line or `TS_PROXY_*` environment variables.
+- You can override `state_dir`, `stop_on_fail`, and `status_listen` from the command line or `TS_PROXY_STATE_DIR`, `TS_PROXY_STOP_ON_FAIL`, and `TS_PROXY_STATUS_LISTEN`.
 
 ## Release schedule
 Version structure example: 0.7.10

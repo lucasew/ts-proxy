@@ -25,14 +25,20 @@ var (
 	ErrDuplicateListen    = errors.New("duplicate listen address")
 	ErrUndefinedEnvVar    = errors.New("references undefined environment variable(s)")
 	ErrForwardHostOnly    = errors.New("forward must be a host without a port")
+	ErrStatusListen       = errors.New("status_listen must be host:port")
 )
+
+// DefaultStatusListen is the loopback address of the status page and /health
+// when status_listen is empty.
+const DefaultStatusListen = "127.0.0.1:8090"
 
 // Config is the top-level configuration for ts-proxy.
 type Config struct {
-	StateDir   string                  `mapstructure:"state_dir" yaml:"state_dir"`
-	StopOnFail bool                    `mapstructure:"stop_on_fail" yaml:"stop_on_fail"`
-	Tokens     map[string]TokenConfig  `mapstructure:"tokens" yaml:"tokens"`
-	Servers    map[string]ServerConfig `mapstructure:"servers" yaml:"servers"`
+	StateDir     string                  `mapstructure:"state_dir" yaml:"state_dir"`
+	StopOnFail   bool                    `mapstructure:"stop_on_fail" yaml:"stop_on_fail"`
+	StatusListen string                  `mapstructure:"status_listen" yaml:"status_listen"`
+	Tokens       map[string]TokenConfig  `mapstructure:"tokens" yaml:"tokens"`
+	Servers      map[string]ServerConfig `mapstructure:"servers" yaml:"servers"`
 }
 
 // TokenConfig defines a Tailscale authentication token.
@@ -78,6 +84,9 @@ func (c *Config) SetDefaults() {
 	if c.StateDir == "" {
 		c.StateDir = "/var/lib/ts-proxy"
 	}
+	if c.StatusListen == "" {
+		c.StatusListen = DefaultStatusListen
+	}
 	if c.Tokens == nil {
 		c.Tokens = make(map[string]TokenConfig)
 	}
@@ -117,6 +126,7 @@ func (c *Config) SetDefaults() {
 //
 // Supported fields:
 //   - state_dir
+//   - status_listen
 //   - tokens.<name>.auth_key
 //   - servers.<name>.hostname
 //   - servers.<name>.token
@@ -174,6 +184,9 @@ func (c *Config) ExpandEnv() error {
 	c.StateDir, err = expand("state_dir", c.StateDir)
 	collect(err)
 
+	c.StatusListen, err = expand("status_listen", c.StatusListen)
+	collect(err)
+
 	// Tokens
 	for name, token := range c.Tokens {
 		token.AuthKey, err = expand(fmt.Sprintf("token %q auth_key", name), token.AuthKey)
@@ -217,6 +230,9 @@ func (c *Config) ExpandEnv() error {
 
 // Validate checks that the config is well-formed.
 func (c *Config) Validate() error {
+	if err := validateStatusListen(c.StatusListen); err != nil {
+		return err
+	}
 	for name := range c.Tokens {
 		if err := ValidateSlug(name); err != nil {
 			return fmt.Errorf("token %q: %w", name, err)
@@ -253,6 +269,17 @@ func (c *Config) Validate() error {
 			}
 			seen[key] = true
 		}
+	}
+	return nil
+}
+
+// validateStatusListen checks that addr is empty or host:port.
+func validateStatusListen(addr string) error {
+	if addr == "" {
+		return nil
+	}
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return fmt.Errorf("%w: %q", ErrStatusListen, addr)
 	}
 	return nil
 }
