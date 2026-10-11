@@ -1,0 +1,79 @@
+package status
+
+import "github.com/lewtec/lewkit/x/http/asset/sakuracss"
+
+templ Dash(ok bool, servers []Server) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>ts-proxy</title>
+			@sakuracss.Load()
+		</head>
+		<body>
+			<h1>ts-proxy</h1>
+			<div id="status">
+				@DashBody(ok, servers)
+			</div>
+			@templ.Raw(pageScript)
+		</body>
+	</html>
+}
+
+templ DashBody(ok bool, servers []Server) {
+	if ok {
+		<p>
+			@icon("running")
+			{ "All servers are running." }
+		</p>
+	} else {
+		<p>
+			@icon("warn")
+			{ "Not every server is running." }
+		</p>
+	}
+	for _, srv := range servers {
+		<h2>{ srv.Name }</h2>
+		<dl>
+			<dt>State</dt>
+			<dd>
+				@icon(srv.State)
+				{ srv.State }
+			</dd>
+			<dt>Hostname</dt>
+			<dd>{ srv.FQDN }</dd>
+			if srv.Forward != "" {
+				<dt>Forward</dt>
+				<dd>{ srv.Forward }</dd>
+			}
+		</dl>
+		if len(srv.Handlers) == 0 {
+			<p>No handlers.</p>
+		} else {
+			<table>
+				<thead>
+					<tr>
+						<th>Type</th>
+						<th>Listen</th>
+						<th>Upstream</th>
+						<th>Availability</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, h := range srv.Handlers {
+						<tr>
+							<td>{ h.Type }</td>
+							<td>{ h.Listen }</td>
+							<td>{ h.Upstream }</td>
+							<td>
+								@icon(h.Availability)
+								{ h.Availability }
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	}
+}

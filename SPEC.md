@@ -40,7 +40,7 @@ TEC-3 wraps `tailscale.com/tsnet.Server.RegisterFallbackTCPHandler`. Listeners a
 | Technique | Relation | Cite |
 |-----------|----------|------|
 | TEC-1, TEC-2, TEC-3 | adopt | `tailscale.com/tsnet` v1.102.3 |
-| TEC-4 | adopt | `github.com/lewtec/lewkit/x/http/asset/sakuracss` |
+| TEC-4 | adopt | `github.com/a-h/templ` page, `sakuracss.Load` |
 | YAML + flags + env | adopt | `github.com/lewtec/lewkit/x/cmd` |
 | HTTP reverse proxy + WhoIs headers | implement | `pkg/handler/http.go` (same header set as Tailscale serve / tclip) |
 | TCP splice | implement | `pkg/handler/tcp.go` |

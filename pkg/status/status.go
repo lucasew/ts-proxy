@@ -1,5 +1,5 @@
 // Package status serves a loopback page and /health for ts-proxy servers.
-// The page uses the sakuracss asset from lewkit.
+// The page is a templ component. Sakura comes from sakuracss.Load.
 package status
 
 import (
@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,10 +15,19 @@ import (
 
 	jsonv2 "encoding/json/v2"
 
+	"github.com/a-h/templ"
 	"github.com/lewtec/lewkit/x/event"
 	"github.com/lewtec/lewkit/x/http/asset"
-	"github.com/lewtec/lewkit/x/http/asset/sakuracss"
 )
+
+//go:generate go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
+
+const pageScript = `<script>
+const box = document.getElementById("status");
+const stream = new EventSource("/events");
+stream.onmessage = (ev) => { box.innerHTML = ev.data; };
+</script>
+`
 
 const (
 	// AvailabilityUp means a TCP dial to the upstream succeeded.
@@ -144,7 +152,7 @@ func (p *page) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *page) home(w http.ResponseWriter, r *http.Request) {
-	buf, err := renderHome(p.probe(r.Context()))
+	buf, err := renderHome(r.Context(), p.probe(r.Context()))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -188,7 +196,7 @@ func (p *page) events(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *page) sendEvent(w http.ResponseWriter, r *http.Request) bool {
-	body, err := renderBody(p.probe(r.Context()))
+	body, err := renderBody(r.Context(), p.probe(r.Context()))
 	if err != nil {
 		slog.Info("status event render", "err", err)
 		return false
@@ -220,33 +228,17 @@ func writeEvent(w http.ResponseWriter, body []byte) error {
 	return err
 }
 
-func renderHome(servers []Server) ([]byte, error) {
-	data := struct {
-		Style   string
-		OK      bool
-		Servers []Server
-	}{
-		Style:   sakuracss.Path,
-		OK:      allRunning(servers),
-		Servers: servers,
-	}
+func renderHome(ctx context.Context, servers []Server) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := pageTmpl.ExecuteTemplate(&buf, "page", data); err != nil {
+	if err := Dash(allRunning(servers), servers).Render(ctx, &buf); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
 }
 
-func renderBody(servers []Server) ([]byte, error) {
-	data := struct {
-		OK      bool
-		Servers []Server
-	}{
-		OK:      allRunning(servers),
-		Servers: servers,
-	}
+func renderBody(ctx context.Context, servers []Server) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := pageTmpl.ExecuteTemplate(&buf, "body", data); err != nil {
+	if err := DashBody(allRunning(servers), servers).Render(ctx, &buf); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -365,55 +357,13 @@ var glyphs = map[string]struct {
 	"authenticating": {colorWait, `<rect x="4" y="7" width="8" height="5.5" rx="1"/><path d="M6 7V5.5a2 2 0 0 1 4 0V7"/>`},
 }
 
-func statusIcon(name string) template.HTML {
+func icon(name string) templ.Component {
 	g, ok := glyphs[name]
 	if !ok {
-		return ""
+		return templ.NopComponent
 	}
-	return template.HTML(fmt.Sprintf(
+	return templ.Raw(fmt.Sprintf(
 		`<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="%s" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.15em;margin-right:0.3em">%s</svg>`,
 		g.color, g.body,
 	))
 }
-
-var pageTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
-	"icon": statusIcon,
-}).Parse(`
-{{define "page"}}<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ts-proxy</title>
-<link rel="stylesheet" href="{{ .Style }}">
-</head>
-<body>
-<h1>ts-proxy</h1>
-<div id="status">{{template "body" .}}</div>
-<script>
-const box = document.getElementById("status");
-const stream = new EventSource("/events");
-stream.onmessage = (ev) => { box.innerHTML = ev.data; };
-</script>
-</body>
-</html>
-{{end}}
-{{define "body"}}{{ if .OK }}<p>{{icon "running"}}All servers are running.</p>{{ else }}<p>{{icon "warn"}}Not every server is running.</p>{{ end }}
-{{ range .Servers }}
-<h2>{{ .Name }}</h2>
-<dl>
-<dt>State</dt><dd>{{icon .State}}{{ .State }}</dd>
-<dt>Hostname</dt><dd>{{ .FQDN }}</dd>
-{{ if .Forward }}<dt>Forward</dt><dd>{{ .Forward }}</dd>{{ end }}
-</dl>
-{{ if .Handlers }}
-<table>
-<thead><tr><th>Type</th><th>Listen</th><th>Upstream</th><th>Availability</th></tr></thead>
-<tbody>
-{{ range .Handlers }}<tr><td>{{ .Type }}</td><td>{{ .Listen }}</td><td>{{ .Upstream }}</td><td>{{icon .Availability}}{{ .Availability }}</td></tr>
-{{ end }}
-</tbody>
-</table>
-{{ else }}<p>No handlers.</p>{{ end }}
-{{ end }}{{end}}
-`))

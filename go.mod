@@ -3,6 +3,7 @@ module github.com/lucasew/ts-proxy
 go 1.27.1
 
 require (
+	github.com/a-h/templ v0.3.1020
 	github.com/lewtec/lewkit v0.0.0-20261010142540-6b6733080794
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.23.0
@@ -12,7 +13,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/a-h/templ v0.3.1020 // indirect
 	github.com/akutz/memconn v0.1.0 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
