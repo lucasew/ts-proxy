@@ -16,28 +16,23 @@ import (
 
 	"github.com/lewtec/lewkit/x/event"
 	"github.com/lewtec/lewkit/x/http/asset/sakuracss"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/lucasew/ts-proxy/pkg/status"
 )
 
 func TestHealthAndDash(t *testing.T) {
 	up, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := up.Close(); err != nil {
-			t.Errorf("close up listener: %v", err)
-		}
+		assert.NoError(t, up.Close())
 	})
 
 	closed, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	require.NoError(t, err)
 	closedAddr := closed.Addr().String()
-	if err := closed.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
+	require.NoError(t, closed.Close())
 
 	snap := func() []status.Server {
 		return []status.Server{{
@@ -57,9 +52,7 @@ func TestHealthAndDash(t *testing.T) {
 	t.Run("health", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
-		}
+		require.Equal(t, http.StatusOK, rec.Code, "body %s", rec.Body)
 		var doc struct {
 			OK      bool `json:"ok"`
 			Servers []struct {
@@ -70,19 +63,17 @@ func TestHealthAndDash(t *testing.T) {
 				} `json:"handlers"`
 			} `json:"servers"`
 		}
-		if err := jsonv2.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
-			t.Fatalf("json: %v", err)
-		}
-		if !doc.OK || len(doc.Servers) != 1 || doc.Servers[0].Name != "web" {
-			t.Fatalf("doc = %+v", doc)
-		}
+		require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &doc))
+		require.True(t, doc.OK)
+		require.Len(t, doc.Servers, 1)
+		require.Equal(t, "web", doc.Servers[0].Name)
 		got := map[string]string{}
 		for _, handler := range doc.Servers[0].Handlers {
 			got[handler.Listen] = handler.Availability
 		}
-		if got[":22"] != status.AvailabilityUp || got[":23"] != status.AvailabilityDown || got[":9"] != status.AvailabilityUnchecked {
-			t.Fatalf("availability = %v", got)
-		}
+		require.Equal(t, status.AvailabilityUp, got[":22"])
+		require.Equal(t, status.AvailabilityDown, got[":23"])
+		require.Equal(t, status.AvailabilityUnchecked, got[":9"])
 	})
 
 	t.Run("not running", func(t *testing.T) {
@@ -91,34 +82,24 @@ func TestHealthAndDash(t *testing.T) {
 		}, nil)
 		rec := httptest.NewRecorder()
 		down.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status = %d, want 503", rec.Code)
-		}
+		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
 
 	t.Run("dash", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d", rec.Code)
-		}
+		require.Equal(t, http.StatusOK, rec.Code)
 		body := rec.Body.String()
 		for _, want := range []string{sakuracss.Path, "/events", "<svg", "web", "running", "127.0.0.2", status.AvailabilityUp, "All servers are running."} {
-			if !strings.Contains(body, want) {
-				t.Errorf("body missing %q", want)
-			}
+			assert.Contains(t, body, want)
 		}
 	})
 
 	t.Run("sakura", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, sakuracss.Path, nil))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
-		}
-		if !strings.Contains(rec.Body.String(), "Sakura.css") {
-			t.Fatalf("stylesheet body = %q", rec.Body.String()[:80])
-		}
+		require.Equal(t, http.StatusOK, rec.Code, "body %s", rec.Body)
+		require.Contains(t, rec.Body.String(), "Sakura.css")
 	})
 }
 
@@ -139,15 +120,12 @@ func TestEventsFollowBus(t *testing.T) {
 	}()
 	rd := bufio.NewReader(pr)
 	first := readEvent(t, rd)
-	if !strings.Contains(first, "starting") {
-		t.Fatalf("first event = %q", first)
-	}
+	require.Contains(t, first, "starting")
 	state.Store("running")
 	bus.PublishKeep(struct{}{})
 	second := readEvent(t, rd)
-	if !strings.Contains(second, "running") || strings.Contains(second, "starting") {
-		t.Fatalf("second event = %q", second)
-	}
+	require.Contains(t, second, "running")
+	require.NotContains(t, second, "starting")
 	cancel()
 }
 
@@ -188,21 +166,17 @@ func readEvent(t *testing.T, r *bufio.Reader) string {
 	}()
 	select {
 	case got := <-ch:
-		if got.err != nil {
-			t.Fatalf("read event: %v", got.err)
-		}
+		require.NoError(t, got.err)
 		return got.s
 	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for event")
+		require.Fail(t, "timeout waiting for event")
 	}
 	return ""
 }
 
 func TestServeStopsWhenContextEnds(t *testing.T) {
 	ln, err := status.Listen("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen: %v", err)
-	}
+	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error, 1)
 	go func() {
@@ -220,31 +194,23 @@ func TestServeStopsWhenContextEnds(t *testing.T) {
 		if err == nil {
 			break
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("health: %v", err)
+		if time.Until(deadline) < 0 {
+			require.NoError(t, err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Errorf("close body: %v", err)
-		}
+		assert.NoError(t, resp.Body.Close())
 	}()
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read health body: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, body %s", resp.StatusCode, body)
-	}
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body %s", body)
 
 	cancel()
 	select {
 	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("Serve: %v", err)
-		}
+		require.NoError(t, err)
 	case <-time.After(3 * time.Second):
-		t.Fatal("Serve did not return after cancel")
+		require.Fail(t, "Serve did not return after cancel")
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/lucasew/ts-proxy/pkg/config"
 	"github.com/lucasew/ts-proxy/pkg/status"
 )
@@ -36,21 +38,13 @@ func TestNewSupervisorResolvesTokensAndStateDir(t *testing.T) {
 
 	sup := NewSupervisor(cfg)
 	servers := sup.Servers()
-	if len(servers) != 2 {
-		t.Fatalf("Servers() len = %d, want 2", len(servers))
-	}
-	if servers[0].Name() != "api" || servers[1].Name() != "web" {
-		t.Fatalf("order/names = %q, %q; want api, web", servers[0].Name(), servers[1].Name())
-	}
-	if servers[0].opts.AuthKey != "tskey-test" || servers[1].opts.AuthKey != "tskey-test" {
-		t.Fatalf("auth keys not resolved from token: %q, %q", servers[0].opts.AuthKey, servers[1].opts.AuthKey)
-	}
-	if servers[0].opts.StateDir != "/var/lib/ts-proxy/api" {
-		t.Fatalf("api StateDir = %q, want /var/lib/ts-proxy/api", servers[0].opts.StateDir)
-	}
-	if servers[1].opts.StateDir != "/var/lib/ts-proxy/web" {
-		t.Fatalf("web StateDir = %q, want /var/lib/ts-proxy/web", servers[1].opts.StateDir)
-	}
+	require.Len(t, servers, 2)
+	require.Equal(t, "api", servers[0].Name())
+	require.Equal(t, "web", servers[1].Name())
+	require.Equal(t, "tskey-test", servers[0].opts.AuthKey)
+	require.Equal(t, "tskey-test", servers[1].opts.AuthKey)
+	require.Equal(t, "/var/lib/ts-proxy/api", servers[0].opts.StateDir)
+	require.Equal(t, "/var/lib/ts-proxy/web", servers[1].opts.StateDir)
 }
 
 func TestNewSupervisorPassesForward(t *testing.T) {
@@ -65,16 +59,9 @@ func TestNewSupervisorPassesForward(t *testing.T) {
 	}
 	sup := NewSupervisor(cfg)
 	servers := sup.Servers()
-	if len(servers) != 1 {
-		t.Fatalf("Servers() len = %d, want 1", len(servers))
-	}
-	if servers[0].opts.Forward != "127.0.0.2" {
-		t.Fatalf("Forward = %q, want 127.0.0.2", servers[0].opts.Forward)
-	}
-	out := sup.DisplayAuthenticated()
-	if !strings.Contains(out, "[forward: 127.0.0.2]") {
-		t.Fatalf("DisplayAuthenticated missing forward: %q", out)
-	}
+	require.Len(t, servers, 1)
+	require.Equal(t, "127.0.0.2", servers[0].opts.Forward)
+	require.Contains(t, sup.DisplayAuthenticated(), "[forward: 127.0.0.2]")
 }
 
 func TestSnapshotHealthFollowsRunningState(t *testing.T) {
@@ -94,20 +81,19 @@ func TestSnapshotHealthFollowsRunningState(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("init health = %d, want 503, body %s", rec.Code, rec.Body)
-	}
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code, "body %s", rec.Body)
 
 	sup.servers[0].mustTransition(StateStarting)
 	sup.servers[0].mustTransition(StateRunning)
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("running health = %d, want 200, body %s", rec.Code, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"name":"web"`) && !strings.Contains(rec.Body.String(), `"name": "web"`) {
-		t.Fatalf("body = %s", rec.Body)
-	}
+	require.Equal(t, http.StatusOK, rec.Code, "body %s", rec.Body)
+	body := rec.Body.String()
+	// Encoding may or may not insert a space after the colon.
+	require.True(t,
+		strings.Contains(body, `"name":"web"`) || strings.Contains(body, `"name": "web"`),
+		"body = %s", body,
+	)
 }
 
 func TestDisplayAuthenticatedUsesFQDNFallback(t *testing.T) {
@@ -124,12 +110,8 @@ func TestDisplayAuthenticatedUsesFQDNFallback(t *testing.T) {
 	}
 	sup := NewSupervisor(cfg)
 	out := sup.DisplayAuthenticated()
-	if !strings.HasPrefix(out, "web (my-web)\n") {
-		t.Fatalf("DisplayAuthenticated = %q, want prefix %q", out, "web (my-web)\n")
-	}
+	require.True(t, strings.HasPrefix(out, "web (my-web)\n"), "got %q", out)
 	for _, part := range []string{":80", "HTTP", "127.0.0.1:8080"} {
-		if !strings.Contains(out, part) {
-			t.Fatalf("DisplayAuthenticated missing %q: %q", part, out)
-		}
+		require.Contains(t, out, part)
 	}
 }

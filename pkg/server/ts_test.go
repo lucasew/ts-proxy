@@ -3,6 +3,7 @@ package server
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"tailscale.com/tsnet"
 )
 
@@ -12,31 +13,19 @@ func TestCurrentTSClearKeepsReplacement(t *testing.T) {
 	second := &tsnet.Server{}
 
 	cur.set(first)
-	if cur.get() != first {
-		t.Fatal("get after set")
-	}
+	require.Same(t, first, cur.get())
 	cur.set(second)
 	cur.clear(first)
-	if cur.get() != second {
-		t.Fatal("clear of the old node dropped the replacement")
-	}
+	require.Same(t, second, cur.get())
 	cur.clear(second)
-	if cur.get() != nil {
-		t.Fatal("clear of the current node left it published")
-	}
+	require.Nil(t, cur.get())
 }
 
 func TestCurrentTSTakeRemovesNode(t *testing.T) {
 	var cur currentTS
 	node := &tsnet.Server{}
 	cur.set(node)
-	if cur.take() != node {
-		t.Fatal("take")
-	}
-	if cur.get() != nil {
-		t.Fatal("get after take")
-	}
-	if cur.take() != nil {
-		t.Fatal("take of an empty slot")
-	}
+	require.Same(t, node, cur.take())
+	require.Nil(t, cur.get())
+	require.Nil(t, cur.take())
 }

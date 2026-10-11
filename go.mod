@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/lewtec/lewkit v0.0.0-20261010142540-6b6733080794
+	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.104.1
@@ -34,7 +35,6 @@ require (
 	github.com/mitchellh/go-ps v1.0.0 // indirect
 	github.com/pires/go-proxyproto v0.15.0 // indirect
 	github.com/safchain/ethtool v0.7.0 // indirect
-	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/tailscale/certstore v0.1.1-0.20260409135935-3638fb84b77d // indirect
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f // indirect

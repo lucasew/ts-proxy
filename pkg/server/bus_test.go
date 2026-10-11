@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lewtec/lewkit/x/event"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTransitionPublishesStatus(t *testing.T) {
@@ -19,7 +20,7 @@ func TestTransitionPublishesStatus(t *testing.T) {
 	srv.mustTransition(StateStarting)
 	select {
 	case <-updates:
-		t.Fatal("rejected transition published")
+		require.Fail(t, "rejected transition published")
 	case <-time.After(50 * time.Millisecond):
 	}
 
@@ -31,10 +32,8 @@ func waitStatus(t *testing.T, updates <-chan struct{}) {
 	t.Helper()
 	select {
 	case _, ok := <-updates:
-		if !ok {
-			t.Fatal("status bus closed")
-		}
+		require.True(t, ok, "status bus closed")
 	case <-time.After(time.Second):
-		t.Fatal("status bus did not publish")
+		require.Fail(t, "status bus did not publish")
 	}
 }

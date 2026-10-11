@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/lucasew/ts-proxy/internal/nettest"
 	"github.com/lucasew/ts-proxy/pkg/handler"
 )
@@ -25,10 +27,7 @@ func TestForwardAddr(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
 			t.Parallel()
-			got := ForwardAddr(tt.host, tt.port)
-			if got != tt.want {
-				t.Fatalf("ForwardAddr(%q, %d) = %q, want %q", tt.host, tt.port, got, tt.want)
-			}
+			require.Equal(t, tt.want, ForwardAddr(tt.host, tt.port))
 		})
 	}
 }
@@ -38,20 +37,14 @@ func TestFallbackTCPSplicesDestPort(t *testing.T) {
 	if err != nil {
 		// 127.0.0.2 is loopback; if the host rejects it, bind 127.0.0.1.
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatalf("listen: %v", err)
-		}
+		require.NoError(t, err)
 	}
 	defer ln.Close()
 
 	host, portStr, err := net.SplitHostPort(ln.Addr().String())
-	if err != nil {
-		t.Fatalf("SplitHostPort: %v", err)
-	}
+	require.NoError(t, err)
 	p, err := net.LookupPort("tcp", portStr)
-	if err != nil {
-		t.Fatalf("LookupPort: %v", err)
-	}
+	require.NoError(t, err)
 	port := uint16(p)
 
 	wait := nettest.AcceptPongOnce(ln)
@@ -62,12 +55,8 @@ func TestFallbackTCPSplicesDestPort(t *testing.T) {
 	src := netip.MustParseAddrPort("100.64.0.2:4242")
 	dst := netip.AddrPortFrom(netip.MustParseAddr("100.64.0.1"), port)
 	serve, intercept := cb(src, dst)
-	if !intercept {
-		t.Fatal("fallback must intercept")
-	}
-	if serve == nil {
-		t.Fatal("fallback must return a handler")
-	}
+	require.True(t, intercept)
+	require.NotNil(t, serve)
 
 	client, server := net.Pipe()
 	done := make(chan struct{})
@@ -76,20 +65,13 @@ func TestFallbackTCPSplicesDestPort(t *testing.T) {
 		close(done)
 	}()
 
-	if _, err := client.Write([]byte("ping")); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if err := client.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
-		t.Fatalf("SetReadDeadline: %v", err)
-	}
+	_, err = client.Write([]byte("ping"))
+	require.NoError(t, err)
+	require.NoError(t, client.SetReadDeadline(time.Now().Add(2*time.Second)))
 	buf := make([]byte, 64)
 	n, err := client.Read(buf)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if got := string(buf[:n]); got != "pong:ping" {
-		t.Fatalf("got %q, want %q", got, "pong:ping")
-	}
+	require.NoError(t, err)
+	require.Equal(t, "pong:ping", string(buf[:n]))
 	if err := client.Close(); err != nil {
 		t.Logf("client close: %v", err)
 	}
@@ -97,7 +79,7 @@ func TestFallbackTCPSplicesDestPort(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("fallback handler did not finish")
+		require.Fail(t, "fallback handler did not finish")
 	}
 }
 
@@ -109,7 +91,5 @@ func TestFallbackTCPRejectsNothing(t *testing.T) {
 		netip.MustParseAddrPort("100.64.0.2:1"),
 		netip.MustParseAddrPort("100.64.0.1:65535"),
 	)
-	if !intercept {
-		t.Fatal("forward fallback must intercept every unmatched TCP port")
-	}
+	require.True(t, intercept, "forward fallback must intercept every unmatched TCP port")
 }
