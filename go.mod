@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/a-h/templ v0.3.1070
-	github.com/lewtec/lewkit v0.0.0-20261010142540-6b6733080794
+	github.com/lewtec/lewkit v0.0.0-20261016223916-8b169be5c5d9
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -19,6 +19,7 @@ require (
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/creachadair/msync v0.10.1 // indirect
 	github.com/dblohm7/wingoes v0.0.0-20260526185140-fb298caac7ca // indirect
+	github.com/ebitengine/purego v0.11.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
 	github.com/gaissmai/bart v0.29.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3 // indirect
