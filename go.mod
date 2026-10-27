@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/a-h/templ v0.3.1070
-	github.com/lewtec/lewkit v0.0.0-20261021012208-7d5f3512b2ec
+	github.com/lewtec/lewkit v0.0.0-20261026134556-0b80f61ca97e
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
