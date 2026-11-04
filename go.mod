@@ -3,7 +3,7 @@ module github.com/lucasew/ts-proxy
 go 1.27.3
 
 require (
-	github.com/a-h/templ v0.3.1070
+	github.com/a-h/templ v0.3.1100
 	github.com/lewtec/lewkit v0.0.0-20261026134556-0b80f61ca97e
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.24.0
