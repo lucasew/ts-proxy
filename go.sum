@@ -142,6 +142,8 @@ github.com/lewtec/lewkit v0.0.0-20261026134556-0b80f61ca97e h1:jkez1VOqnG6aEOgWf
 github.com/lewtec/lewkit v0.0.0-20261026134556-0b80f61ca97e/go.mod h1:n7dWIrZq9bIAtWJyGUc1Ifejx33KGULml1ExAmPaoUA=
 github.com/lewtec/lewkit v0.0.0-20261111212929-30e9db4e6248 h1:27Ps0sB0s7+zCiwLO0l5QoO7fqFRrifOMd3I96XkA0o=
 github.com/lewtec/lewkit v0.0.0-20261111212929-30e9db4e6248/go.mod h1:dm1tdazHZQMnjJnQ+Jz2yjJVSNrqRI+Agayn8S+eqrM=
+github.com/lewtec/lewkit v0.0.0-20261113130321-63440964a92d h1:j4BhL+eBuTk4BcjJ5AaDsbKg1RNSlRDexqsJm7DPGOQ=
+github.com/lewtec/lewkit v0.0.0-20261113130321-63440964a92d/go.mod h1:i3Ckmhjb9zRAfNPT3dPWqVQyQnAeOEaxYwb9zMxxb08=
 github.com/mdlayher/genetlink v1.4.0 h1:f/Xs7Y2T+GyX9b3dbiUhnLE9InGs5F9RxJ2JwBMl71o=
 github.com/mdlayher/genetlink v1.4.0/go.mod h1:d1hrKr8fwZU2JkcAtQUAzeTrI7nbgQSl+5k1cC0biSA=
 github.com/mdlayher/netlink v1.11.2 h1:HKh2jqe+omdSWcQ88nrT7INE61B0NXfiSPFdgL4YbNI=
