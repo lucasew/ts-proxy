@@ -1,6 +1,6 @@
 module github.com/lucasew/ts-proxy
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/a-h/templ v0.3.1070
@@ -8,7 +8,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.25.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.104.6
+	tailscale.com v1.104.7
 )
 
 require (
