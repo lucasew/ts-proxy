@@ -126,6 +126,8 @@ github.com/klauspost/compress v1.20.0 h1:a3C1ke2ohxFymNlb2HWAHjDeKCI90scRskErZkR
 github.com/klauspost/compress v1.20.0/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/klauspost/compress v1.20.3 h1:zWNoFqq/lSuYQRim3dUXlXeA0IqwuZGicdG5ZTfY5j4=
 github.com/klauspost/compress v1.20.3/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
+github.com/klauspost/compress v1.20.4 h1:dD0v/bvxtjCBqQu6sx1TNWkalEY5lNTIe+HY9w8TeNI=
+github.com/klauspost/compress v1.20.4/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/kortschak/wol v0.0.0-20200729010619-da482cc4850a h1:+RR6SqnTkDLWyICxS1xpjCi/3dhyV+TgZwA6Ww3KncQ=
 github.com/kortschak/wol v0.0.0-20200729010619-da482cc4850a/go.mod h1:YTtCCM3ryyfiu4F7t8HQ1mxvp1UBdWM2r6Xa+nGWvDk=
 github.com/kr/fs v0.1.0 h1:Jskdu9ieNAYnjxsi0LbQp1ulIKZV1LAFgK1tWhpZgl8=
@@ -142,6 +144,8 @@ github.com/lewtec/lewkit v0.0.0-20261026134556-0b80f61ca97e h1:jkez1VOqnG6aEOgWf
 github.com/lewtec/lewkit v0.0.0-20261026134556-0b80f61ca97e/go.mod h1:n7dWIrZq9bIAtWJyGUc1Ifejx33KGULml1ExAmPaoUA=
 github.com/lewtec/lewkit v0.0.0-20261111212929-30e9db4e6248 h1:27Ps0sB0s7+zCiwLO0l5QoO7fqFRrifOMd3I96XkA0o=
 github.com/lewtec/lewkit v0.0.0-20261111212929-30e9db4e6248/go.mod h1:dm1tdazHZQMnjJnQ+Jz2yjJVSNrqRI+Agayn8S+eqrM=
+github.com/lewtec/lewkit v0.0.0-20261118140820-ef5abc858563 h1:ohPbHlxM4yZgi81E+GCq/BKj1BXXEqO+3bRLLtd0w0k=
+github.com/lewtec/lewkit v0.0.0-20261118140820-ef5abc858563/go.mod h1:IkNbxGTRzFs1FHNblXuELsO9VmWl+5bsPU1F1wmgERU=
 github.com/mdlayher/genetlink v1.4.0 h1:f/Xs7Y2T+GyX9b3dbiUhnLE9InGs5F9RxJ2JwBMl71o=
 github.com/mdlayher/genetlink v1.4.0/go.mod h1:d1hrKr8fwZU2JkcAtQUAzeTrI7nbgQSl+5k1cC0biSA=
 github.com/mdlayher/netlink v1.11.2 h1:HKh2jqe+omdSWcQ88nrT7INE61B0NXfiSPFdgL4YbNI=
